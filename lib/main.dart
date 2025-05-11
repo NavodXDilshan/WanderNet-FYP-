@@ -1,6 +1,7 @@
 // main.dart
 import 'package:app/pages/home.dart';
 import 'package:app/pages/planner.dart';
+import 'package:app/pages/weather.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -43,8 +44,8 @@ class _MainScreenState extends State<MainScreen> {
     Homepage(), // Your existing Homepage
     const Center(child: Text('Market Page')),
     const Center(child: Text('Feed Page')),
+    const WeatherScreen(),
     Planner(),
-    const Center(child: Text('Planner Page3')),
   ];
 
   void _onItemTapped(int index) {
