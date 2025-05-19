@@ -17,6 +17,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
   final TextEditingController _cityController = TextEditingController();
+  
 
   @override
   void initState() {
@@ -111,8 +112,21 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading || _weatherData == null && _errorMessage.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color.fromARGB(255, 250, 181, 96),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Colors.white, // White spinner for contrast
+          ),
+        ),
+      );
+    }
     return Scaffold(
-      appBar: AppBar(title: const Text('Weather Tracker')),
+      appBar: AppBar(
+        title: const Text('Weather Tracker'),
+        centerTitle: true,
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -142,29 +156,72 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 style: const TextStyle(color: Colors.red),
               )
             else if (_weatherData != null)
-              Card(
+              Container(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    // mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        'Weather: ${_weatherData!.weatherDescription}',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      Text('Temperature: ${_weatherData!.temperature} °C'),
-                      Text('Humidity: ${_weatherData!.humidity}%'),
-                      Text('Wind Speed: ${_weatherData!.windSpeed} m/s'),
-                      Text('Time: ${_weatherData!.time}'),
+                      cardTemplate(context, Text('Weather')),
+                      cardTemplate(context, Text('${_weatherData!.weatherDescription}',
+                      textAlign: TextAlign.justify,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
                     ],
                   ),
                 ),
               ),
+              
+              Card(
+                
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      cardTemplate(context, Text('Temperature: ${_weatherData!.temperature} °C')),
+                      cardTemplate(context, Text('Humidity: ${_weatherData!.humidity}%')),
+                      cardTemplate(context, Text('Wind Speed: ${_weatherData!.windSpeed} m/s')),
+                      cardTemplate(context, Text('Time: ${_weatherData!.time}')),
+                      _getIconFromName(_weatherData!.iconName)
+                    ],
+                  ),
+                ),
+              ),
+              
           ],
         ),
       ),
     );
   }
+
+  Widget cardTemplate(BuildContext context, Widget child){
+    return Card(
+      margin: EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child:Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            child
+          ],
+        ))
+    );
+  }
+
+  Icon _getIconFromName(String iconName) {
+  switch (iconName) {
+    case 'clear-day':
+      return Icon(Icons.wb_sunny, color: Colors.orange);
+    case 'rain':
+      return Icon(Icons.beach_access, color: Colors.blue, size: 55.0,);
+    case 'cloudy':
+      return Icon(Icons.cloud, color: Colors.grey);
+    default:
+      return Icon(Icons.help_outline);
+  }
+}
 
   @override
   void dispose() {

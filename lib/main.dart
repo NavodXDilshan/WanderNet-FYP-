@@ -1,5 +1,6 @@
-// main.dart
+import 'package:app/pages/feed.dart';
 import 'package:app/pages/home.dart';
+import 'package:app/pages/market.dart';
 import 'package:app/pages/planner.dart';
 import 'package:app/pages/weather.dart';
 import 'package:flutter/material.dart';
@@ -17,14 +18,11 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         fontFamily: 'Poppins',
-        primaryColor: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.white, 
-          selectedItemColor: Color.fromARGB(255, 240, 144, 9), 
-          unselectedItemColor: Colors.grey, 
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
         ),
-        ),
+      ),
       home: const MainScreen(),
     );
   }
@@ -41,11 +39,11 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
   static List<Widget> _pages = [
-    Homepage(), // Your existing Homepage
-    const Center(child: Text('Market Page')),
-    const Center(child: Text('Feed Page')),
-    const WeatherScreen(),
-    Planner(),
+    Homepage(),
+    const Market(),
+    const Feed(),
+    const WeatherScreen(), // Replaced Weather Page2
+    const Planner(),
   ];
 
   void _onItemTapped(int index) {
@@ -60,8 +58,7 @@ class _MainScreenState extends State<MainScreen> {
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color.fromARGB(255, 240, 144, 9),
+        selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
@@ -69,19 +66,19 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.storefront),
+            icon: Icon(Icons.person),
             label: 'Market',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.explore),
+            icon: Icon(Icons.settings),
             label: 'Feed',
           ),
-                  BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.cloud),
             label: 'Weather',
           ),
-                  BottomNavigationBarItem(
-            icon: Icon(Icons.map),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
             label: 'Planner',
           ),
         ],
