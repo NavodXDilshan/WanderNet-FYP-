@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../services/weather_service.dart';
-import '../models/weather_data.dart';
+import 'package:google_places_flutter/google_places_flutter.dart';
+import 'package:google_places_flutter/model/prediction.dart';
+import '../dbHelper/mongodb.dart';
+
 
 class Planner extends StatefulWidget {
   const Planner({super.key});
@@ -19,10 +21,12 @@ class PlannerState extends State<Planner> {
     northeast: LatLng(9.8350, 81.8815),
   );
   bool _isLocationPermissionGranted = false;
-  WeatherData? _weatherData;
-  final WeatherService _weatherService = WeatherService();
+  Set<Marker> _markers = {};
+  final TextEditingController _searchController = TextEditingController();
+  final String userEmail = 'k.m.navoddilshan@gmail.com';
   String? selectedOption = 'Max Node';
   final List<String> options = ['Max Node', 'Max Rating', 'Hybrid'];
+  static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
 
   @override
   void initState() {
@@ -70,36 +74,76 @@ class PlannerState extends State<Planner> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    _mapController?.setLatLngBounds(_sriLankaBounds);
-  }
-
-  Future<void> _fetchWeatherForLocation(LatLng location) async {
-    try {
-      WeatherData weather = await _weatherService.getWeatherByLatLng(
-        location.latitude,
-        location.longitude,
-      );
-      setState(() {
-        _weatherData = weather;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Weather: ${weather.weatherDescription}, ${weather.temperature}°C',
-          ),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to fetch weather: $e')),
-      );
-    }
   }
 
   void _updateSelectedOption(String? value) {
     setState(() {
       selectedOption = value;
     });
+  }
+
+  void _addMarker(Prediction prediction) async {
+    if (prediction.lat != null && prediction.lng != null) {
+      final lat = double.tryParse(prediction.lat!);
+      final lng = double.tryParse(prediction.lng!);
+      if (lat != null && lng != null) {
+        final marker = Marker(
+          markerId: MarkerId(prediction.placeId ?? prediction.description ?? ''),
+          position: LatLng(lat, lng),
+          infoWindow: InfoWindow(
+            title: prediction.description ?? 'Unknown Place',
+            onTap: () => _saveToWishlist(prediction),
+          ),
+        );
+        setState(() {
+          _markers = {marker};
+        });
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12.0),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid coordinates for selected place')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No coordinates available for selected place')),
+      );
+    }
+  }
+
+  Future<void> _saveToWishlist(Prediction prediction) async {
+    if (prediction.lat != null && prediction.lng != null) {
+      final lat = double.tryParse(prediction.lat!);
+      final lng = double.tryParse(prediction.lng!);
+      if (lat != null && lng != null) {
+        try {
+          await MongoDataBase.insertWishlistItem(userEmail, {
+            'placeName': prediction.description ?? 'Unknown Place',
+            'latitude': lat,
+            'longitude': lng,
+            'placeId': prediction.placeId,
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Added ${prediction.description} to wishlist')),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add to wishlist: $e')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid coordinates for wishlist')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No coordinates available for wishlist')),
+      );
+    }
   }
 
   @override
@@ -125,14 +169,19 @@ class PlannerState extends State<Planner> {
             myLocationButtonEnabled: true,
             mapType: MapType.normal,
             minMaxZoomPreference: const MinMaxZoomPreference(7.0, 15.0),
-            markers: {
-              const Marker(
-                markerId: MarkerId('colombo'),
-                position: LatLng(6.9271, 79.8612),
-                infoWindow: InfoWindow(title: 'Colombo'),
-              ),
-            },
-            onTap: _fetchWeatherForLocation,
+            markers: _markers,
+          ),
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: GooglePlaceAutoCompleteTextField(
+              textEditingController: _searchController,
+              googleAPIKey: googleApiKey,
+              // hintText: 'Search for a place',
+              countries: ['LK'],
+              getPlaceDetailWithLatLng: _addMarker,
+            ),
           ),
           if (!_isLocationPermissionGranted)
             Positioned(
@@ -154,7 +203,7 @@ class PlannerState extends State<Planner> {
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       centerTitle: true,
       leading: IconButton(
-        icon: Icon(Icons.menu),
+        icon: const Icon(Icons.menu),
         onPressed: () {
           _scaffoldKey.currentState?.openDrawer();
         },
@@ -167,6 +216,7 @@ class PlannerState extends State<Planner> {
   @override
   void dispose() {
     _mapController?.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 }
@@ -190,8 +240,8 @@ class DrawerBar extends StatelessWidget {
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 240, 144, 9),
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 240, 144, 9),
             ),
             child: const Text(
               'Menu',
@@ -202,27 +252,24 @@ class DrawerBar extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: Icon(Icons.home),
+            leading: const Icon(Icons.home),
             title: const Text('Home'),
             onTap: () {
-              Navigator.pop(context); // Close the drawer
-              // Navigate or do something
+              Navigator.pop(context);
             },
           ),
           ListTile(
-            leading: Icon(Icons.settings),
+            leading: const Icon(Icons.settings),
             title: const Text('Setting'),
             onTap: () {
               Navigator.pop(context);
-              // Navigate or do something
             },
           ),
           ListTile(
-            leading: Icon(Icons.logout),
+            leading: const Icon(Icons.logout),
             title: const Text('Logout'),
             onTap: () {
-              Navigator.pop(context); // Close the drawer
-              // Navigate or do something
+              Navigator.pop(context);
             },
           ),
           ListTile(
@@ -244,8 +291,4 @@ class DrawerBar extends StatelessWidget {
       ),
     );
   }
-}
-
-extension on GoogleMapController? {
-  void setLatLngBounds(LatLngBounds sriLankaBounds) {}
 }

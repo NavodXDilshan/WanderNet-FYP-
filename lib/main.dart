@@ -1,3 +1,4 @@
+import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/pages/feed.dart';
 import 'package:app/pages/home.dart';
 import 'package:app/pages/market.dart';
@@ -5,7 +6,10 @@ import 'package:app/pages/planner.dart';
 import 'package:app/pages/weather.dart';
 import 'package:flutter/material.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await MongoDataBase.connectPosts();
+  await MongoDataBase.connectWishlist();
   runApp(const MyApp());
 }
 
