@@ -2,7 +2,8 @@ import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/models/post_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -13,10 +14,14 @@ class Profile extends StatefulWidget {
 
 class _ProfileState extends State<Profile> {
   final TextEditingController _postController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  String? _selectedLocation;
+  static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
 
   @override
   void dispose() {
     _postController.dispose();
+    _locationController.dispose();
     super.dispose();
   }
 
@@ -39,12 +44,17 @@ class _ProfileState extends State<Profile> {
         'comments': 0,
         'shares': 0,
         'createdAt': DateTime.now().toIso8601String(),
+        'location': _selectedLocation,
       };
       await MongoDataBase.insertPost(postData);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Post created successfully")),
       );
       _postController.clear();
+      setState(() {
+        _selectedLocation = null;
+      });
+      _locationController.clear();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to create post: $e")),
@@ -52,10 +62,80 @@ class _ProfileState extends State<Profile> {
     }
   }
 
+  void _showLocationSearchDialog() {
+    List<Map<String, dynamic>> predictions = [];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Search Location'),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => SizedBox(
+            height: 300,
+            width: double.maxFinite,
+            child: Column(
+              children: [
+                TextField(
+                  controller: _locationController,
+                  decoration: const InputDecoration(hintText: 'Enter a place'),
+                  onChanged: (value) async {
+                    if (value.isEmpty) {
+                      setDialogState(() => predictions = []);
+                      return;
+                    }
+                    final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+                        '?input=${Uri.encodeQueryComponent(value)}'
+                        '&components=country:LK'
+                        '&key=$googleApiKey';
+                    try {
+                      final response = await http.get(Uri.parse(url));
+                      if (response.statusCode == 200) {
+                        final data = json.decode(response.body);
+                        setDialogState(() {
+                          predictions = List<Map<String, dynamic>>.from(data['predictions']);
+                        });
+                      } else {
+                        print('API Error: ${response.statusCode}');
+                      }
+                    } catch (e) {
+                      print('HTTP Error: $e');
+                    }
+                  },
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: predictions.length,
+                    itemBuilder: (context, index) {
+                      final prediction = predictions[index];
+                      return ListTile(
+                        title: Text(prediction['description'] ?? ''),
+                        onTap: () {
+                          print('Selected: ${prediction['description']}');
+                          setState(() {
+                            _selectedLocation = prediction['description'];
+                          });
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),)
+          ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = PostModel(
-      id:"",
+      id: "",
       userName: "Navod Dilshan",
       userAvatar: "assets/images/user1.png",
       timeAgo: "2h ago",
@@ -64,6 +144,7 @@ class _ProfileState extends State<Profile> {
       likes: 120,
       comments: 15,
       shares: 5,
+      location: "Colombo, Sri Lanka",
     );
 
     return Scaffold(
@@ -81,7 +162,7 @@ class _ProfileState extends State<Profile> {
         elevation: 0.0,
         leading: GestureDetector(
           onTap: () {
-            Navigator.pop(context); // Back to Feed
+            Navigator.pop(context);
           },
           child: Container(
             margin: const EdgeInsets.all(10),
@@ -103,12 +184,10 @@ class _ProfileState extends State<Profile> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Profile Header
             Stack(
               clipBehavior: Clip.none,
               alignment: Alignment.bottomLeft,
               children: [
-                // Cover Photo
                 Container(
                   height: 150,
                   width: double.infinity,
@@ -119,7 +198,6 @@ class _ProfileState extends State<Profile> {
                     ),
                   ),
                 ),
-                // Profile Avatar
                 Positioned(
                   bottom: -40,
                   left: 20,
@@ -135,7 +213,6 @@ class _ProfileState extends State<Profile> {
               ],
             ),
             const SizedBox(height: 50),
-            // User Name and Edit Profile Button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -151,7 +228,6 @@ class _ProfileState extends State<Profile> {
                   const SizedBox(height: 10),
                   ElevatedButton(
                     onPressed: () {
-                      // Placeholder for edit profile
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text("Edit Profile clicked")),
                       );
@@ -169,7 +245,6 @@ class _ProfileState extends State<Profile> {
               ),
             ),
             const SizedBox(height: 20),
-            // Post Input Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -192,7 +267,6 @@ class _ProfileState extends State<Profile> {
                     children: [
                       ElevatedButton.icon(
                         onPressed: () {
-                          // Placeholder for image upload
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Image upload clicked")),
                           );
@@ -208,12 +282,7 @@ class _ProfileState extends State<Profile> {
                         ),
                       ),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          // Placeholder for location selection
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Add Location clicked")),
-                          );
-                        },
+                        onPressed: _showLocationSearchDialog,
                         icon: const Icon(Icons.location_on),
                         label: const Text("Add Location"),
                         style: ElevatedButton.styleFrom(
@@ -237,11 +306,20 @@ class _ProfileState extends State<Profile> {
                       ),
                     ],
                   ),
+                  if (_selectedLocation != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Location: $_selectedLocation',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            // Posts Section
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
@@ -304,6 +382,17 @@ class _ProfileState extends State<Profile> {
               ],
             ),
             const SizedBox(height: 10),
+            if (post.location != null) ...[
+              Text(
+                post.location!,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 5),
+            ],
             Text(
               post.content,
               style: const TextStyle(fontSize: 14),
@@ -361,11 +450,7 @@ class _ProfileState extends State<Profile> {
                   icon: Icons.add_location_alt,
                   icolor: Colors.grey[600],
                   label: "Add",
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Add clicked")),
-                    );
-                  },
+                  onTap: _showLocationSearchDialog,
                 ),
               ],
             ),

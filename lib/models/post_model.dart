@@ -8,6 +8,7 @@ class PostModel {
   final int likes;
   final int comments;
   final int shares;
+  final String? location; // New field for location name
 
   PostModel({
     required this.id,
@@ -19,5 +20,6 @@ class PostModel {
     required this.likes,
     required this.comments,
     required this.shares,
+    this.location,
   });
 }
