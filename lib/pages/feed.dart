@@ -13,8 +13,8 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  // Placeholder user ID (replace with FirebaseAuth.instance.currentUser?.uid)
   final String currentUserId = 'navod_dilshan';
+  final String userEmail = 'k.m.navoddilshan@gmail.com';
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +102,10 @@ class _FeedState extends State<Feed> {
                       likes: _parseToInt(postData['likes']) ?? 0,
                       comments: _parseToInt(postData['comments']) ?? 0,
                       shares: _parseToInt(postData['shares']) ?? 0,
+                      location: postData['location'],
+                      latitude: _parseToDouble(postData['latitude']),
+                      longitude: _parseToDouble(postData['longitude']),
+                      placeId: postData['placeId'],
                     );
                     return _buildPostCard(context, post);
                   }).toList(),
@@ -119,6 +123,14 @@ class _FeedState extends State<Feed> {
     if (value == null) return null;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  // Helper function to parse String or num to double
+  double? _parseToDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
     return null;
   }
 
@@ -266,6 +278,17 @@ class _FeedState extends State<Feed> {
                       ],
                     ),
                     const SizedBox(height: 10),
+                    if (post.location != null) ...[
+                      Text(
+                        '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
                     Text(
                       post.content,
                       style: const TextStyle(fontSize: 14),
@@ -345,18 +368,33 @@ class _FeedState extends State<Feed> {
                           icon: Icons.add_location_alt,
                           icolor: shareColor,
                           label: "Add",
-                          onTap: () {
-                            setCardState(() {
-                              isShared = !isShared;
-                              shareColor = isShared ? Colors.green : Colors.grey[600]!;
-                            });
-                            MongoDataBase.incrementShares(post.id).then((_) {
-                              setState(() {}); // Refresh to update shares count
-                            }).catchError((e) {
+                          onTap: () async {
+                            if (post.location == null || post.latitude == null || post.longitude == null) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Error sharing post: $e")),
+                                const SnackBar(content: Text("No location data available for this post")),
                               );
-                            });
+                              return;
+                            }
+                            try {
+                              await MongoDataBase.insertWishlistItem(userEmail, {
+                                'placeName': post.location,
+                                'latitude': post.latitude,
+                                'longitude': post.longitude,
+                                'placeId': post.placeId ?? '',
+                                'createdAt': DateTime.now().toIso8601String(),
+                              });
+                              setCardState(() {
+                                isShared = !isShared;
+                                shareColor = isShared ? Colors.green : Colors.grey[600]!;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Added ${post.location} to wishlist")),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Failed to add to wishlist: $e")),
+                              );
+                            }
                           },
                         ),
                       ],

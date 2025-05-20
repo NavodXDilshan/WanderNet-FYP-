@@ -16,7 +16,11 @@ class _ProfileState extends State<Profile> {
   final TextEditingController _postController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   String? _selectedLocation;
+  double? _selectedLatitude;
+  double? _selectedLongitude;
+  String? _selectedPlaceId;
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
+  final String userEmail = 'k.m.navoddilshan@gmail.com';
 
   @override
   void dispose() {
@@ -45,6 +49,9 @@ class _ProfileState extends State<Profile> {
         'shares': 0,
         'createdAt': DateTime.now().toIso8601String(),
         'location': _selectedLocation,
+        'latitude': _selectedLatitude,
+        'longitude': _selectedLongitude,
+        'placeId': _selectedPlaceId, // Added
       };
       await MongoDataBase.insertPost(postData);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,6 +60,9 @@ class _ProfileState extends State<Profile> {
       _postController.clear();
       setState(() {
         _selectedLocation = null;
+        _selectedLatitude = null;
+        _selectedLongitude = null;
+        _selectedPlaceId = null;
       });
       _locationController.clear();
     } catch (e) {
@@ -70,7 +80,7 @@ class _ProfileState extends State<Profile> {
         title: const Text('Search Location'),
         content: StatefulBuilder(
           builder: (context, setDialogState) => SizedBox(
-            height: 300,
+            height: 400,
             width: double.maxFinite,
             child: Column(
               children: [
@@ -108,12 +118,37 @@ class _ProfileState extends State<Profile> {
                       final prediction = predictions[index];
                       return ListTile(
                         title: Text(prediction['description'] ?? ''),
-                        onTap: () {
-                          print('Selected: ${prediction['description']}');
-                          setState(() {
-                            _selectedLocation = prediction['description'];
-                          });
-                          Navigator.pop(context);
+                        onTap: () async {
+                          final placeId = prediction['place_id'];
+                          final detailsUrl = 'https://maps.googleapis.com/maps/api/place/details/json'
+                              '?place_id=$placeId'
+                              '&fields=geometry,name'
+                              '&key=$googleApiKey';
+                          try {
+                            final response = await http.get(Uri.parse(detailsUrl));
+                            if (response.statusCode == 200) {
+                              final data = json.decode(response.body);
+                              final lat = data['result']['geometry']['location']['lat'];
+                              final lng = data['result']['geometry']['location']['lng'];
+                              setState(() {
+                                _selectedLocation = prediction['description'];
+                                _selectedLatitude = lat;
+                                _selectedLongitude = lng;
+                                _selectedPlaceId = placeId;
+                              });
+                              Navigator.pop(context);
+                            } else {
+                              print('Details API Error: ${response.statusCode}');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Failed to fetch place details")),
+                              );
+                            }
+                          } catch (e) {
+                            print('Details Error: $e');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Failed to fetch place details")),
+                            );
+                          }
                         },
                       );
                     },
@@ -126,8 +161,9 @@ class _ProfileState extends State<Profile> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),)
-          ],
+            child: const Text('Cancel'),
+          ),
+        ],
       ),
     );
   }
@@ -145,6 +181,9 @@ class _ProfileState extends State<Profile> {
       comments: 15,
       shares: 5,
       location: "Colombo, Sri Lanka",
+      latitude: 6.9271,
+      longitude: 79.8612,
+      placeId: null,
     );
 
     return Scaffold(
@@ -309,7 +348,7 @@ class _ProfileState extends State<Profile> {
                   if (_selectedLocation != null) ...[
                     const SizedBox(height: 10),
                     Text(
-                      'Location: $_selectedLocation',
+                      'Location: $_selectedLocation (${_selectedLatitude?.toStringAsFixed(4)}, ${_selectedLongitude?.toStringAsFixed(4)})',
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
@@ -384,7 +423,7 @@ class _ProfileState extends State<Profile> {
             const SizedBox(height: 10),
             if (post.location != null) ...[
               Text(
-                post.location!,
+                '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
