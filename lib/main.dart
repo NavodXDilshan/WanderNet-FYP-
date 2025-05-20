@@ -8,8 +8,7 @@ import 'package:flutter/material.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MongoDataBase.connectPosts();
-  await MongoDataBase.connectWishlist();
+  await MongoDataBase.connect();
   runApp(const MyApp());
 }
 

@@ -4,7 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:google_places_flutter/google_places_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
 import '../dbHelper/mongodb.dart';
-
+import 'settings.dart';
 
 class Planner extends StatefulWidget {
   const Planner({super.key});
@@ -32,6 +32,7 @@ class PlannerState extends State<Planner> {
   void initState() {
     super.initState();
     _checkAndRequestLocationPermission();
+    _loadWishlistMarkers();
   }
 
   Future<void> _checkAndRequestLocationPermission() async {
@@ -72,6 +73,35 @@ class PlannerState extends State<Planner> {
     }
   }
 
+  Future<void> _loadWishlistMarkers() async {
+    try {
+      final wishlistItems = await MongoDataBase.fetchWishlistItems(userEmail);
+      final newMarkers = wishlistItems.map((item) {
+        final lat = item['latitude'] as double?;
+        final lng = item['longitude'] as double?;
+        final placeName = item['placeName'] as String? ?? 'Unknown Place';
+        final placeId = item['placeId'] as String? ?? placeName;
+        if (lat == null || lng == null) {
+          return null;
+        }
+        return Marker(
+          markerId: MarkerId(placeId),
+          position: LatLng(lat, lng),
+          infoWindow: InfoWindow(
+            title: placeName,
+          ),
+        );
+      }).whereType<Marker>().toSet();
+      setState(() {
+        _markers = newMarkers;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load wishlist markers: $e')),
+      );
+    }
+  }
+
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
   }
@@ -88,7 +118,7 @@ class PlannerState extends State<Planner> {
       final lng = double.tryParse(prediction.lng!);
       if (lat != null && lng != null) {
         final marker = Marker(
-          markerId: MarkerId(prediction.placeId ?? prediction.description ?? ''),
+          markerId: MarkerId(prediction.placeId ?? prediction.description ?? 'search_marker'),
           position: LatLng(lat, lng),
           infoWindow: InfoWindow(
             title: prediction.description ?? 'Unknown Place',
@@ -96,7 +126,7 @@ class PlannerState extends State<Planner> {
           ),
         );
         setState(() {
-          _markers = {marker};
+          _markers = {..._markers, marker}; // Preserve wishlist markers
         });
         _mapController?.animateCamera(
           CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12.0),
@@ -129,6 +159,7 @@ class PlannerState extends State<Planner> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Added ${prediction.description} to wishlist')),
           );
+          _loadWishlistMarkers(); // Refresh markers
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add to wishlist: $e')),
@@ -178,7 +209,6 @@ class PlannerState extends State<Planner> {
             child: GooglePlaceAutoCompleteTextField(
               textEditingController: _searchController,
               googleAPIKey: googleApiKey,
-              // hintText: 'Search for a place',
               countries: ['LK'],
               getPlaceDetailWithLatLng: _addMarker,
             ),
@@ -260,9 +290,13 @@ class DrawerBar extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.settings),
-            title: const Text('Setting'),
+            title: const Text('Settings'),
             onTap: () {
               Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const Settings()),
+              );
             },
           ),
           ListTile(
