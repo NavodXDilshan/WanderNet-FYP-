@@ -7,6 +7,7 @@ import '../dbHelper/mongodb.dart';
 import 'settings.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 class Planner extends StatefulWidget {
   const Planner({super.key});
@@ -29,11 +30,12 @@ class PlannerState extends State<Planner> {
   final TextEditingController _timeConstraintController = TextEditingController();
   final String userEmail = 'k.m.navoddilshan@gmail.com';
   String? selectedOption = 'Max Node';
-  String? selectedStart;
-  String? selectedTarget;
+  String? selectedStartPlaceId; // Use placeId for uniqueness
+  String? selectedTargetPlaceId; // Use placeId for uniqueness
   List<Map<String, dynamic>> wishlistItems = [];
   final List<String> options = ['Max Node', 'Max Rating', 'Hybrid'];
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
+  bool _useRealRoutes = true; // Toggle for real routes vs straight lines
 
   // Map UI options to backend algorithm names
   final Map<String, String> algorithmMapping = {
@@ -100,7 +102,19 @@ class PlannerState extends State<Planner> {
     try {
       final items = await MongoDataBase.fetchWishlistItems(userEmail);
       print('Loaded wishlist items: ${items.length}');
-      final newMarkers = items.map((item) {
+      // Deduplicate by placeId
+      final seenPlaceIds = <String>{};
+      final uniqueItems = items.where((item) {
+        final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
+        if (seenPlaceIds.contains(placeId)) {
+          print('Duplicate placeId detected: $placeId');
+          return false;
+        }
+        seenPlaceIds.add(placeId);
+        return true;
+      }).toList();
+
+      final newMarkers = uniqueItems.map((item) {
         final lat = item['latitude'] as double?;
         final lng = item['longitude'] as double?;
         final placeName = item['placeName'] as String? ?? 'Unknown Place';
@@ -117,23 +131,62 @@ class PlannerState extends State<Planner> {
           ),
         );
       }).whereType<Marker>().toSet();
+
       setState(() {
-        wishlistItems = items;
+        wishlistItems = uniqueItems;
         _markers = newMarkers;
-        if (items.isNotEmpty) {
-          selectedStart = items[0]['placeName'] as String? ?? 'Unknown Place';
-          selectedTarget = items.length > 1
-              ? (items[1]['placeName'] as String? ?? 'Unknown Place')
-              : selectedStart;
+        if (wishlistItems.isNotEmpty) {
+          selectedStartPlaceId = wishlistItems[0]['placeId'] as String? ?? wishlistItems[0]['placeName'] as String? ?? 'Unknown Place';
+          selectedTargetPlaceId = wishlistItems.length > 1
+              ? (wishlistItems[1]['placeId'] as String? ?? wishlistItems[1]['placeName'] as String? ?? 'Unknown Place')
+              : selectedStartPlaceId;
         }
       });
-      print('Markers updated: ${_markers.length}, Start: $selectedStart, Target: $selectedTarget');
+      print('Markers updated: ${_markers.length}, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
+      print('Wishlist items: ${wishlistItems.map((item) => {'placeId': item['placeId'], 'placeName': item['placeName']})}');
     } catch (e) {
       print('Failed to load wishlist data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load wishlist data: $e')),
       );
     }
+  }
+
+  Future<List<LatLng>> _getDirections(List<LatLng> waypoints) async {
+    final polylinePoints = PolylinePoints();
+    List<LatLng> allPoints = [];
+
+    for (int i = 0; i < waypoints.length - 1; i++) {
+      final origin = waypoints[i];
+      final destination = waypoints[i + 1];
+
+      final result = await http.get(
+        Uri.parse(
+          'https://maps.googleapis.com/maps/api/directions/json'
+          '?origin=${origin.latitude},${origin.longitude}'
+          '&destination=${destination.latitude},${destination.longitude}'
+          '&key=$googleApiKey',
+        ),
+      );
+
+      if (result.statusCode == 200) {
+        final data = jsonDecode(result.body);
+        if (data['status'] == 'OK') {
+          final encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          final points = polylinePoints.decodePolyline(encodedPolyline);
+          allPoints.addAll(points.map((point) => LatLng(point.latitude, point.longitude)));
+          print('Fetched directions from ${origin.latitude},${origin.longitude} to ${destination.latitude},${destination.longitude}: ${points.length} points');
+        } else {
+          print('Directions API error: ${data['status']}');
+          throw Exception('Directions API error: ${data['status']}');
+        }
+      } else {
+        print('Directions API HTTP error: ${result.statusCode}');
+        throw Exception('Directions API HTTP error: ${result.statusCode}');
+      }
+    }
+
+    return allPoints;
   }
 
   Future<void> _calculateRoute() async {
@@ -156,10 +209,10 @@ class PlannerState extends State<Planner> {
         );
         return;
       }
-      final timeLimitMinutes = timeLimitHours * 60; // Convert hours to minutes
+      final timeLimitMinutes = timeLimitHours * 60;
       print('Time constraint: $timeLimitHours hours ($timeLimitMinutes minutes)');
 
-      if (selectedStart == null || selectedTarget == null) {
+      if (selectedStartPlaceId == null || selectedTargetPlaceId == null) {
         print('Error: Start or target not selected');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select start and target locations')),
@@ -167,16 +220,16 @@ class PlannerState extends State<Planner> {
         return;
       }
 
-      if (selectedStart == selectedTarget) {
-        print('Error: Start and target are the same: $selectedStart');
+      if (selectedStartPlaceId == selectedTargetPlaceId) {
+        print('Error: Start and target are the same: $selectedStartPlaceId');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Start and target locations must be different')),
         );
         return;
       }
 
-      final startIndex = wishlistItems.indexWhere((item) => item['placeName'] == selectedStart);
-      final targetIndex = wishlistItems.indexWhere((item) => item['placeName'] == selectedTarget);
+      final startIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedStartPlaceId);
+      final targetIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedTargetPlaceId);
 
       if (startIndex == -1 || targetIndex == -1) {
         print('Error: Invalid start or target index. Start: $startIndex, Target: $targetIndex');
@@ -247,33 +300,46 @@ class PlannerState extends State<Planner> {
 
         print('Route received: $route');
 
-        final routePoints = route.map((index) {
+        final waypoints = route.map((index) {
           final item = wishlistItems[index];
           return LatLng(item['latitude'] as double, item['longitude'] as double);
         }).toList();
+
+        List<LatLng> polylinePoints;
+        if (_useRealRoutes) {
+          setState(() {
+            _polylines = {};
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Fetching real route...')),
+          );
+          polylinePoints = await _getDirections(waypoints);
+        } else {
+          polylinePoints = waypoints; // Straight lines
+        }
 
         setState(() {
           _polylines = {
             Polyline(
               polylineId: const PolylineId('route'),
-              points: routePoints,
+              points: polylinePoints,
               color: Colors.blue,
               width: 5,
             ),
           };
         });
 
-        if (routePoints.isNotEmpty) {
+        if (polylinePoints.isNotEmpty) {
           _mapController?.animateCamera(
             CameraUpdate.newLatLngBounds(
               LatLngBounds(
                 southwest: LatLng(
-                  routePoints.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
-                  routePoints.map((p) => p.longitude).reduce((a, b) => a < b ? a : b),
+                  polylinePoints.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
+                  polylinePoints.map((p) => p.longitude).reduce((a, b) => a < b ? a : b),
                 ),
                 northeast: LatLng(
-                  routePoints.map((p) => p.latitude).reduce((a, b) => a > b ? a : b),
-                  routePoints.map((p) => p.longitude).reduce((a, b) => a > b ? a : b),
+                  polylinePoints.map((p) => p.latitude).reduce((a, b) => a > b ? a : b),
+                  polylinePoints.map((p) => p.longitude).reduce((a, b) => a > b ? a : b),
                 ),
               ),
               100.0,
@@ -281,7 +347,7 @@ class PlannerState extends State<Planner> {
           );
         }
 
-        print('Polyline updated with ${routePoints.length} points');
+        print('Polyline updated with ${polylinePoints.length} points');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Route calculated and displayed')),
         );
@@ -312,18 +378,25 @@ class PlannerState extends State<Planner> {
     print('Selected option updated: $value');
   }
 
-  void _updateSelectedStart(String? value) {
+  void _updateSelectedStart(String? placeId) {
     setState(() {
-      selectedStart = value;
+      selectedStartPlaceId = placeId;
     });
-    print('Selected start updated: $value');
+    print('Selected start updated: $placeId');
   }
 
-  void _updateSelectedTarget(String? value) {
+  void _updateSelectedTarget(String? placeId) {
     setState(() {
-      selectedTarget = value;
+      selectedTargetPlaceId = placeId;
     });
-    print('Selected target updated: $value');
+    print('Selected target updated: $placeId');
+  }
+
+  void _toggleRouteType(bool value) {
+    setState(() {
+      _useRealRoutes = value;
+    });
+    print('Route type updated: ${_useRealRoutes ? "Real routes" : "Straight lines"}');
   }
 
   void _addMarker(Prediction prediction) async {
@@ -414,10 +487,12 @@ class PlannerState extends State<Planner> {
         timeConstraintController: _timeConstraintController,
         onCalculate: _calculateRoute,
         wishlistItems: wishlistItems,
-        selectedStart: selectedStart,
-        selectedTarget: selectedTarget,
+        selectedStartPlaceId: selectedStartPlaceId,
+        selectedTargetPlaceId: selectedTargetPlaceId,
         onStartChanged: _updateSelectedStart,
         onTargetChanged: _updateSelectedTarget,
+        useRealRoutes: _useRealRoutes,
+        onRouteTypeChanged: _toggleRouteType,
       ),
       body: Stack(
         children: [
@@ -492,10 +567,12 @@ class DrawerBar extends StatelessWidget {
   final TextEditingController timeConstraintController;
   final VoidCallback onCalculate;
   final List<Map<String, dynamic>> wishlistItems;
-  final String? selectedStart;
-  final String? selectedTarget;
+  final String? selectedStartPlaceId;
+  final String? selectedTargetPlaceId;
   final ValueChanged<String?> onStartChanged;
   final ValueChanged<String?> onTargetChanged;
+  final bool useRealRoutes;
+  final ValueChanged<bool> onRouteTypeChanged;
 
   const DrawerBar({
     super.key,
@@ -505,18 +582,16 @@ class DrawerBar extends StatelessWidget {
     required this.timeConstraintController,
     required this.onCalculate,
     required this.wishlistItems,
-    required this.selectedStart,
-    required this.selectedTarget,
+    required this.selectedStartPlaceId,
+    required this.selectedTargetPlaceId,
     required this.onStartChanged,
     required this.onTargetChanged,
+    required this.useRealRoutes,
+    required this.onRouteTypeChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final locationNames = wishlistItems
-        .map((item) => item['placeName'] as String? ?? 'Unknown Place')
-        .toList();
-
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -575,17 +650,33 @@ class DrawerBar extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('Use Real Routes:'),
+                Switch(
+                  value: useRealRoutes,
+                  onChanged: onRouteTypeChanged,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: DropdownButtonFormField<String>(
-              value: selectedStart,
+              value: selectedStartPlaceId,
               decoration: const InputDecoration(
                 labelText: 'Start Location',
                 border: OutlineInputBorder(),
               ),
-              items: locationNames
-                  .map((name) => DropdownMenuItem<String>(
-                        value: name,
-                        child: Text(name),
-                      ))
+              items: wishlistItems
+                  .map((item) {
+                    final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
+                    final placeName = item['placeName'] as String? ?? 'Unknown Place';
+                    return DropdownMenuItem<String>(
+                      value: placeId,
+                      child: Text(placeName),
+                    );
+                  })
                   .toList(),
               onChanged: onStartChanged,
               isExpanded: true,
@@ -594,16 +685,20 @@ class DrawerBar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: DropdownButtonFormField<String>(
-              value: selectedTarget,
+              value: selectedTargetPlaceId,
               decoration: const InputDecoration(
                 labelText: 'Target Location',
                 border: OutlineInputBorder(),
               ),
-              items: locationNames
-                  .map((name) => DropdownMenuItem<String>(
-                        value: name,
-                        child: Text(name),
-                      ))
+              items: wishlistItems
+                  .map((item) {
+                    final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
+                    final placeName = item['placeName'] as String? ?? 'Unknown Place';
+                    return DropdownMenuItem<String>(
+                      value: placeId,
+                      child: Text(placeName),
+                    );
+                  })
                   .toList(),
               onChanged: onTargetChanged,
               isExpanded: true,

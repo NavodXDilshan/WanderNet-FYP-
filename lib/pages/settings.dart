@@ -69,7 +69,7 @@ class _SettingsState extends State<Settings> {
         }
         if (switchWeight != null && (switchWeight < 0.0 || switchWeight > 100.0)) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Switch Weight for ${item['placeName']} must be between 0.0 and 100.0')),
+            SnackBar(content: Text('Explore time for ${item['placeName']} in Hours')),
           );
           return;
         }
