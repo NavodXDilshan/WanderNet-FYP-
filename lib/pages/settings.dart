@@ -148,7 +148,7 @@ class _SettingsState extends State<Settings> {
                                   TextField(
                                     controller: weightControllers[itemId],
                                     decoration: const InputDecoration(
-                                      labelText: 'Switch Weight (0.0 to 100.0)',
+                                      labelText: 'Exploration Time (hours)',
                                       border: OutlineInputBorder(),
                                     ),
                                     keyboardType: TextInputType.numberWithOptions(decimal: true),

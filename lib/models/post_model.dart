@@ -11,7 +11,8 @@ class PostModel {
   final String? location;
   final double? latitude;
   final double? longitude;
-  final String? placeId; // New field
+  final String? placeId;
+  final List<Map<String, dynamic>> commentsList;
 
   PostModel({
     required this.id,
@@ -27,5 +28,6 @@ class PostModel {
     this.latitude,
     this.longitude,
     this.placeId,
+    this.commentsList = const [],
   });
 }

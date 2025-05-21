@@ -58,6 +58,7 @@ class _FeedState extends State<Feed> {
               'shares': 0,
               'likedBy': [],
               'createdAt': DateTime.now().toIso8601String(),
+              'commentsList': [],
             });
             setState(() {}); // Refresh posts
             ScaffoldMessenger.of(context).showSnackBar(
@@ -106,6 +107,9 @@ class _FeedState extends State<Feed> {
                       latitude: _parseToDouble(postData['latitude']),
                       longitude: _parseToDouble(postData['longitude']),
                       placeId: postData['placeId'],
+                      commentsList: postData['commentsList'] != null
+                          ? List<Map<String, dynamic>>.from(postData['commentsList'])
+                          : [],
                     );
                     return _buildPostCard(context, post);
                   }).toList(),
@@ -224,189 +228,328 @@ class _FeedState extends State<Feed> {
 
   Widget _buildPostCard(BuildContext context, PostModel post) {
     return FutureBuilder<bool>(
-      future: MongoDataBase.hasUserLiked(post.id, currentUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      future: Future.wait([
+        MongoDataBase.hasUserLiked(post.id, currentUserId),
+        // Check if post's location is in wishlist
+        MongoDataBase.fetchWishlistItems(userEmail).then((items) {
+          return items.any((item) => item['placeId'] == post.placeId && post.placeId != null);
+        }),
+      ]).then((results) => results[1] as bool), // Use wishlist result
+      builder: (context, wishlistSnapshot) {
+        if (wishlistSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        bool isLiked = snapshot.data ?? false;
-        bool isCommented = false;
-        bool isShared = false;
-        Color likeColor = isLiked ? Colors.red : Colors.grey[600]!;
-        Color commentColor = Colors.grey[600]!;
-        Color shareColor = Colors.grey[600]!;
+        bool isShared = wishlistSnapshot.data ?? false;
+        return FutureBuilder<bool>(
+          future: MongoDataBase.hasUserLiked(post.id, currentUserId),
+          builder: (context, likeSnapshot) {
+            if (likeSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            bool isLiked = likeSnapshot.data ?? false;
+            bool showCommentInput = false;
+            bool showComments = false; // New state for collapsing comments
+            Color likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+            Color commentColor = Colors.grey[600]!;
+            Color shareColor = isShared ? Colors.green : Colors.grey[600]!;
+            final commentController = TextEditingController();
 
-        return StatefulBuilder(
-          builder: (context, setCardState) {
-            return Card(
-              color: const Color.fromARGB(255, 251, 217, 169),
-              margin: const EdgeInsets.only(bottom: 10),
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            return StatefulBuilder(
+              builder: (context, setCardState) {
+                return Card(
+                  color: const Color.fromARGB(255, 251, 217, 169),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundImage: AssetImage(post.userAvatar),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
                           children: [
-                            Text(
-                              post.userName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundImage: AssetImage(post.userAvatar),
                             ),
-                            Text(
-                              post.timeAgo,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  post.userName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  post.timeAgo,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (post.location != null) ...[
-                      Text(
-                        '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                    ],
-                    Text(
-                      post.content,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    if (post.imagePath != null) ...[
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!, width: 1),
+                        const SizedBox(height: 10),
+                        if (post.location != null) ...[
+                          Text(
+                            '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                          child: Image.asset(
-                            post.imagePath!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
+                          const SizedBox(height: 5),
+                        ],
+                        Text(
+                          post.content,
+                          style: const TextStyle(fontSize: 14),
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("${post.likes} Likes"),
-                        Text("${post.comments} Comments"),
-                        Text("${post.shares} Shares"),
-                      ],
-                    ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildInteractionButton(
-                          icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                          icolor: likeColor,
-                          label: "Like",
-                          onTap: isLiked
-                              ? () {} // Ignore tap if already liked
-                              : () {
+                        if (post.imagePath != null) ...[
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[300]!, width: 1),
+                              ),
+                              child: Image.asset(
+                                post.imagePath!,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("${post.likes} Likes"),
+                            Text("${post.comments} Comments"),
+                            Text("${post.shares} Shares"),
+                          ],
+                        ),
+                        const Divider(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildInteractionButton(
+                              icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                              icolor: likeColor,
+                              label: "Like",
+                              onTap: isLiked
+                                  ? () {} // Ignore tap if already liked
+                                  : () {
+                                      setCardState(() {
+                                        isLiked = true;
+                                        likeColor = Colors.red;
+                                      });
+                                      MongoDataBase.likePost(post.id, currentUserId).then((_) {
+                                        setState(() {}); // Refresh to update likes count
+                                      }).catchError((e) {
+                                        setCardState(() {
+                                          isLiked = false;
+                                          likeColor = Colors.grey[600]!;
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text("Error liking post: $e")),
+                                        );
+                                      });
+                                    },
+                            ),
+                            _buildInteractionButton(
+                              icon: Icons.comment_outlined,
+                              icolor: commentColor,
+                              label: "Comment",
+                              onTap: () {
+                                setCardState(() {
+                                  showCommentInput = !showCommentInput;
+                                  commentColor = showCommentInput ? Colors.blue : Colors.grey[600]!;
+                                });
+                              },
+                            ),
+                            _buildInteractionButton(
+                              icon: Icons.add_location_alt,
+                              icolor: shareColor,
+                              label: "Add",
+                              onTap: isShared
+                                  ? () {} // Ignore tap if already added
+                                  : () async {
+                                      if (post.location == null || post.latitude == null || post.longitude == null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("No location data available for this post")),
+                                        );
+                                        return;
+                                      }
+                                      try {
+                                        await MongoDataBase.insertWishlistItem(userEmail, {
+                                          'placeName': post.location,
+                                          'latitude': post.latitude,
+                                          'longitude': post.longitude,
+                                          'placeId': post.placeId ?? '',
+                                          'createdAt': DateTime.now().toIso8601String(),
+                                        });
+                                        setCardState(() {
+                                          isShared = true;
+                                          shareColor = Colors.green;
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text("Added ${post.location} to wishlist")),
+                                        );
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text("Failed to add to wishlist: $e")),
+                                        );
+                                      }
+                                    },
+                            ),
+                          ],
+                        ),
+                        if (showCommentInput) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: commentController,
+                                  decoration: const InputDecoration(
+                                    hintText: "Write a comment...",
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              IconButton(
+                                icon: const Icon(Icons.send, color: Colors.blue),
+                                onPressed: () async {
+                                  final commentText = commentController.text.trim();
+                                  if (commentText.isNotEmpty) {
+                                    try {
+                                      await MongoDataBase.insertComment(
+                                        post.id,
+                                        currentUserId,
+                                        'Navod Dilshan',
+                                        commentText,
+                                      );
+                                      commentController.clear();
+                                      setCardState(() {
+                                        showCommentInput = false;
+                                        commentColor = Colors.grey[600]!;
+                                      });
+                                      setState(() {}); // Refresh to update comments
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text("Comment added")),
+                                      );
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text("Error adding comment: $e")),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (post.commentsList.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          const Divider(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Comments",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
                                   setCardState(() {
-                                    isLiked = true;
-                                    likeColor = Colors.red;
-                                  });
-                                  MongoDataBase.likePost(post.id, currentUserId).then((_) {
-                                    setState(() {}); // Refresh to update likes count
-                                  }).catchError((e) {
-                                    setCardState(() {
-                                      isLiked = false;
-                                      likeColor = Colors.grey[600]!;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text("Error liking post: $e")),
-                                    );
+                                    showComments = !showComments;
                                   });
                                 },
-                        ),
-                        _buildInteractionButton(
-                          icon: Icons.comment_outlined,
-                          icolor: commentColor,
-                          label: "Comment",
-                          onTap: () {
-                            setCardState(() {
-                              isCommented = !isCommented;
-                              commentColor = isCommented ? Colors.blue : Colors.grey[600]!;
-                            });
-                            MongoDataBase.incrementComments(post.id).then((_) {
-                              setState(() {}); // Refresh to update comments count
-                            }).catchError((e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Error commenting on post: $e")),
+                                child: Text(
+                                  showComments ? "Hide Comments" : "Show Comments (${post.comments})",
+                                  style: const TextStyle(fontSize: 12, color: Colors.blue),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (showComments)
+                            ...post.commentsList.map((comment) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 5),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          comment['userName'] ?? 'Unknown',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          _formatCommentTime(comment['createdAt']),
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      comment['content'] ?? '',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
                               );
-                            });
-                          },
-                        ),
-                        _buildInteractionButton(
-                          icon: Icons.add_location_alt,
-                          icolor: shareColor,
-                          label: "Add",
-                          onTap: () async {
-                            if (post.location == null || post.latitude == null || post.longitude == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("No location data available for this post")),
-                              );
-                              return;
-                            }
-                            try {
-                              await MongoDataBase.insertWishlistItem(userEmail, {
-                                'placeName': post.location,
-                                'latitude': post.latitude,
-                                'longitude': post.longitude,
-                                'placeId': post.placeId ?? '',
-                                'createdAt': DateTime.now().toIso8601String(),
-                              });
-                              setCardState(() {
-                                isShared = !isShared;
-                                shareColor = isShared ? Colors.green : Colors.grey[600]!;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Added ${post.location} to wishlist")),
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Failed to add to wishlist: $e")),
-                              );
-                            }
-                          },
-                        ),
+                            }).toList(),
+                        ],
                       ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  // Format comment timestamp
+  String _formatCommentTime(String? createdAt) {
+    if (createdAt == null) return 'Unknown time';
+    try {
+      final dateTime = DateTime.parse(createdAt);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      if (difference.inMinutes < 60) {
+        return '${difference.inMinutes} minutes ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours} hours ago';
+      } else {
+        return '${difference.inDays} days ago';
+      }
+    } catch (e) {
+      return 'Unknown time';
+    }
   }
 
   Widget _buildInteractionButton({

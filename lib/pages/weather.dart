@@ -17,7 +17,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
   final TextEditingController _cityController = TextEditingController();
-  
 
   @override
   void initState() {
@@ -31,7 +30,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
       _errorMessage = '';
     });
 
-    // Check if location services are enabled
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() {
@@ -41,7 +39,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
       return;
     }
 
-    // Check permission
     PermissionStatus status = await Permission.location.request();
     if (status.isGranted) {
       try {
@@ -84,9 +81,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 
   Future<void> _fetchWeatherByCity() async {
-    if (_cityController.text.isEmpty) {
+    final city = _cityController.text.trim();
+    if (city.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a city name')),
+        const SnackBar(content: Text('Please enter a place name')),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^[a-zA-Z\s,-]+$').hasMatch(city)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid place name (letters, spaces, commas, or hyphens only)')),
       );
       return;
     }
@@ -97,36 +102,46 @@ class _WeatherScreenState extends State<WeatherScreen> {
     });
 
     try {
-      WeatherData weather = await _weatherService.getWeatherByCity(_cityController.text);
+      WeatherData weather = await _weatherService.getWeatherByCity(city);
       setState(() {
         _weatherData = weather;
         _isLoading = false;
+        _cityController.clear();
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Weather fetched for ${weather.cityName}')),
+      );
     } catch (e) {
+      String errorMsg;
+      if (e.toString().contains('Invalid Ambee API key')) {
+        errorMsg = 'Invalid Ambee API key. Verify at api.ambeedata.com.';
+      } else if (e.toString().contains('Invalid Google API key')) {
+        errorMsg = 'Invalid Google API key. Verify at console.cloud.google.com.';
+      } else if (e.toString().contains('not found')) {
+        errorMsg = 'Place "$city" not found. Try a different name (e.g., Colombo, LK).';
+      } else if (e.toString().contains('network')) {
+        errorMsg = 'Network error. Please check your internet connection.';
+      } else {
+        errorMsg = 'Failed to fetch weather: $e';
+      }
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to fetch weather: $e';
+        _errorMessage = errorMsg;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg)),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _weatherData == null && _errorMessage.isEmpty) {
-      return Scaffold(
-        backgroundColor: const Color.fromARGB(255, 250, 181, 96),
-        body: const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white, // White spinner for contrast
-          ),
-        ),
-      );
-    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Weather Tracker'),
         centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 240, 144, 9),),
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -134,11 +149,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
             TextField(
               controller: _cityController,
               decoration: InputDecoration(
-                labelText: 'Enter city (e.g., Colombo)',
+                labelText: 'Enter place',
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.search),
                   onPressed: _fetchWeatherByCity,
                 ),
+                border: const OutlineInputBorder(),
               ),
               onSubmitted: (_) => _fetchWeatherByCity(),
             ),
@@ -153,75 +169,113 @@ class _WeatherScreenState extends State<WeatherScreen> {
             else if (_errorMessage.isNotEmpty)
               Text(
                 _errorMessage,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+                textAlign: TextAlign.center,
               )
             else if (_weatherData != null)
-              Container(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+              Expanded(
+                child: SingleChildScrollView(
                   child: Column(
-                    // mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      cardTemplate(context, Text('Weather')),
-                      cardTemplate(context, Text('${_weatherData!.weatherDescription}',
-                      textAlign: TextAlign.justify,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                _weatherData!.cityName,
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _weatherData!.weatherDescription,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildWeatherRow('Temperature', '${_weatherData!.temperature} °C'),
+                              _buildWeatherRow('Humidity', '${_weatherData!.humidity}%'),
+                              _buildWeatherRow('Wind Speed', '${_weatherData!.windSpeed} m/s'),
+                              _buildWeatherRow('Time', _weatherData!.time),
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: _weatherData!.iconName.isNotEmpty
+                                      ? _getIconFromName(_weatherData!.iconName)
+                                      : const Icon(Icons.help_outline, size: 55.0),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-              
-              Card(
-                
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      cardTemplate(context, Text('Temperature: ${_weatherData!.temperature} °C')),
-                      cardTemplate(context, Text('Humidity: ${_weatherData!.humidity}%')),
-                      cardTemplate(context, Text('Wind Speed: ${_weatherData!.windSpeed} m/s')),
-                      cardTemplate(context, Text('Time: ${_weatherData!.time}')),
-                      _getIconFromName(_weatherData!.iconName)
-                    ],
-                  ),
-                ),
-              ),
-              
           ],
         ),
       ),
     );
   }
 
-  Widget cardTemplate(BuildContext context, Widget child){
-    return Card(
-      margin: EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child:Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            child
-          ],
-        ))
+  Widget _buildWeatherRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 
   Icon _getIconFromName(String iconName) {
-  switch (iconName) {
-    case 'clear-day':
-      return Icon(Icons.wb_sunny, color: Colors.orange);
-    case 'rain':
-      return Icon(Icons.beach_access, color: Colors.blue, size: 55.0,);
-    case 'cloudy':
-      return Icon(Icons.cloud, color: Colors.grey);
-    default:
-      return Icon(Icons.help_outline);
+    switch (iconName) {
+      case 'clear-day':
+        return const Icon(Icons.wb_sunny, color: Colors.orange, size: 55.0);
+      case 'clear-night':
+        return const Icon(Icons.nightlight_round, color: Colors.blueGrey, size: 55.0);
+      case 'rain':
+        return const Icon(Icons.beach_access, color: Colors.blue, size: 55.0);
+      case 'snow':
+        return const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 55.0);
+      case 'cloudy':
+      case 'partly-cloudy-day':
+      case 'partly-cloudy-night':
+        return const Icon(Icons.cloud, color: Colors.grey, size: 55.0);
+      case 'wind':
+        return const Icon(Icons.air, color: Colors.teal, size: 55.0);
+      default:
+        return const Icon(Icons.help_outline, size: 55.0);
+    }
   }
-}
 
   @override
   void dispose() {

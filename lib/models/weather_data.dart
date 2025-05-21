@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class WeatherData {
+  final String cityName;
   final double temperature;
   final double humidity;
   final double windSpeed;
@@ -10,6 +10,7 @@ class WeatherData {
   final String iconName;
 
   WeatherData({
+    required this.cityName,
     required this.temperature,
     required this.humidity,
     required this.windSpeed,
@@ -18,51 +19,47 @@ class WeatherData {
     required this.iconName,
   });
 
-  factory WeatherData.fromJson(Map<String, dynamic> json) {
+  factory WeatherData.fromJson(Map<String, dynamic> json, {String? city}) {
     final data = json['data'] as Map<String, dynamic>? ?? {};
 
-    // Handle time as Unix timestamp (int)
     String timeString = 'Unknown';
     if (data['time'] is int) {
       final timestamp = data['time'] as int;
       final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-      timeString = DateFormat('yyyy-MM-dd HH:mm:ss').format(dateTime);
+      timeString = DateFormat('yyyy-MM-dd HH:mm').format(dateTime);
     } else if (data['time'] is String) {
       timeString = data['time'] as String;
     }
-  
 
     return WeatherData(
+      cityName: city ?? data['place'] as String? ?? 'Unknown Location',
       temperature: (data['temperature'] as num?)?.toDouble() ?? 0.0,
       humidity: (data['humidity'] as num?)?.toDouble() ?? 0.0,
       windSpeed: (data['windSpeed'] as num?)?.toDouble() ?? 0.0,
-      weatherDescription: data['summary'] as String? ?? data['icon'] as String? ?? 'Unknown',
+      weatherDescription: data['summary'] as String? ?? _mapIconToDescription(data['icon'] as String? ?? 'unknown'),
       time: timeString,
       iconName: data['icon'] as String? ?? 'default',
     );
   }
 
-  get text => null;
-
-  static Icon _mapIcon(String iconName) {
-  switch (iconName) {
-    case 'clear-day':
-      return Icon(Icons.wb_sunny, color: Colors.orange);
-    case 'clear-night':
-      return Icon(Icons.nightlight_round, color: Colors.blueGrey);
-    case 'rain':
-      return Icon(Icons.beach_access, color: Colors.blue);
-    case 'snow':
-      return Icon(Icons.ac_unit, color: Colors.lightBlueAccent);
-    case 'cloudy':
-    case 'partly-cloudy-day':
-    case 'partly-cloudy-night':
-      return Icon(Icons.cloud, color: Colors.grey);
-    case 'wind':
-      return Icon(Icons.air, color: Colors.teal);
-    default:
-      return Icon(Icons.help_outline, color: Colors.grey);
+  static String _mapIconToDescription(String iconName) {
+    switch (iconName) {
+      case 'clear-day':
+        return 'Clear Sky';
+      case 'clear-night':
+        return 'Clear Night';
+      case 'rain':
+        return 'Rain';
+      case 'snow':
+        return 'Snow';
+      case 'cloudy':
+      case 'partly-cloudy-day':
+      case 'partly-cloudy-night':
+        return 'Cloudy';
+      case 'wind':
+        return 'Windy';
+      default:
+        return 'Unknown';
+    }
   }
-}
-
 }

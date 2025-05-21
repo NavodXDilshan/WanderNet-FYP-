@@ -32,7 +32,9 @@ class MongoDataBase {
 
   static Future<List<Map<String, dynamic>>> fetchPosts() async {
     try {
-      final posts = await _postsCollection.find().toList();
+    final posts = await _postsCollection
+      .find(where.sortBy('createdAt', descending: true))
+      .toList();
       return posts.cast<Map<String, dynamic>>();
     } catch (e) {
       print('Error fetching posts: $e');
@@ -132,6 +134,42 @@ class MongoDataBase {
       );
     } catch (e) {
       print('Error updating wishlist item: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> insertComment(String postId, String userId, String userName, String content) async {
+    try {
+      final comment = {
+        'userId': userId,
+        'userName': userName,
+        'content': content,
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      await _postsCollection.update(
+        where.eq('_id', ObjectId.fromHexString(postId)),
+        {
+          '\$push': {'commentsList': comment},
+          '\$inc': {'comments': 1},
+        },
+      );
+      print('Comment inserted for post $postId by $userId');
+    } catch (e) {
+      print('Error inserting comment: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchComments(String postId) async {
+    try {
+      final post = await _postsCollection.findOne(where.eq('_id', ObjectId.fromHexString(postId)));
+      if (post != null && post['commentsList'] != null) {
+        return List<Map<String, dynamic>>.from(post['commentsList']);
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching comments: $e');
       rethrow;
     }
   }

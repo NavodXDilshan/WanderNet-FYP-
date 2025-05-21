@@ -232,7 +232,7 @@ class _ProfileState extends State<Profile> {
                   width: double.infinity,
                   decoration: const BoxDecoration(
                     image: DecorationImage(
-                      image: AssetImage("assets/images/cover_photo.jpg"),
+                      image: AssetImage("assets/images/cover.jpeg"),
                       fit: BoxFit.cover,
                     ),
                   ),

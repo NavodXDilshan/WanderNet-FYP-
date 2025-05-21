@@ -16,29 +16,29 @@ class CategoryModel {
     List<CategoryModel> categories = [];
     categories.add(
       CategoryModel(
-        name: 'Salad', 
-        iconPath:'assets/icons/plate.svg' , 
+        name: 'Urban', 
+        iconPath:'assets/icons/urban.svg' , 
         boxColor: Color(0xff92A3FD)
     ));
       
       categories.add(
       CategoryModel(
-        name: 'Cake', 
-        iconPath:'assets/icons/pancakes.svg' , 
+        name: 'Beaches', 
+        iconPath:'assets/icons/beach.svg' , 
         boxColor: Color(0xffC588F2)
     ));
       
       categories.add(
       CategoryModel(
-        name: 'Pie', 
-        iconPath:'assets/icons/pie.svg' , 
+        name: 'Religious', 
+        iconPath:'assets/icons/sites.svg' , 
         boxColor: Color(0xff92A3FD)
     ));
   
         categories.add(
       CategoryModel(
-        name: 'Smoothies', 
-        iconPath:'assets/icons/orange-snacks.svg' , 
+        name: 'Wildlife', 
+        iconPath:'assets/icons/wildlife.svg' , 
         boxColor: Color(0xffC588F2)
     ));
   

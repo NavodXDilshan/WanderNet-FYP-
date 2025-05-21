@@ -3,44 +3,95 @@ import 'package:http/http.dart' as http;
 import '../models/weather_data.dart';
 
 class WeatherService {
-  static const String _apiKey = 'e8b076d174ea56742e0a0057e60f338006a36bbf52c845f1a95db124e2f8102b'; // Your Ambee API key
-  static const String _baseUrl = 'https://api.ambeedata.com/weather';
+  // Hardcoded API keys (replace with your actual keys)
+  static const String _ambeeApiKey = 'e8b076d174ea56742e0a0057e60f338006a36bbf52c845f1a95db124e2f8102b';
+  static const String _googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
+  static const String _ambeeBaseUrl = 'https://api.ambeedata.com/weather';
+  static const String _googleBaseUrl = 'https://maps.googleapis.com/maps/api/geocode';
+
+  // Cache for weather data to reduce API calls
+  static final Map<String, WeatherData> _cache = {};
 
   Future<WeatherData> getWeatherByLatLng(double lat, double lng) async {
-    final url = Uri.parse('$_baseUrl/latest/by-lat-lng?lat=$lat&lng=$lng&units=si');
+    final cacheKey = '$lat,$lng';
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey]!;
+    }
+
+    final url = Uri.parse('$_ambeeBaseUrl/latest/by-lat-lng?lat=$lat&lng=$lng&units=si');
     final response = await http.get(
       url,
-      headers: {'x-api-key': _apiKey, 'Content-type': 'application/json'},
+      headers: {'x-api-key': _ambeeApiKey, 'Content-type': 'application/json'},
     );
-
-    print('Weather API URL: $url');
-    print('Weather API Response: ${response.statusCode}, ${response.body}');
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body);
-      print('Parsed JSON: $json');
-      return WeatherData.fromJson(json);
+      final weather = WeatherData.fromJson(json, city: 'Current Location');
+      _cache[cacheKey] = weather;
+      return weather;
     } else {
-      throw Exception('Failed to fetch weather data: ${response.statusCode}, ${response.body}');
+      final error = jsonDecode(response.body)['message'] ?? response.body;
+      throw Exception('Failed to fetch weather: ${response.statusCode}, $error');
     }
   }
 
   Future<WeatherData> getWeatherByCity(String city) async {
-    final url = Uri.parse('$_baseUrl/latest/by-place?place=$city&units=si');
+    final cacheKey = city.toLowerCase();
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey]!;
+    }
+
+    // Step 1: Get coordinates from Google Geocoding API
+    final coordinates = await _getCoordinatesFromCity(city);
+    final lat = coordinates['lat'];
+    final lng = coordinates['lng'];
+    final placeName = coordinates['placeName'];
+
+    // Step 2: Fetch weather using Ambee's /by-lat-lng
+    final url = Uri.parse('$_ambeeBaseUrl/latest/by-lat-lng?lat=$lat&lng=$lng&units=si');
     final response = await http.get(
       url,
-      headers: {'x-api-key': _apiKey, 'Content-type': 'application/json'},
+      headers: {'x-api-key': _ambeeApiKey, 'Content-type': 'application/json'},
     );
-
-    print('Weather API URL: $url');
-    print('Weather API Response: ${response.statusCode}, ${response.body}');
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body);
-      print('Parsed JSON: $json');
-      return WeatherData.fromJson(json);
+      final weather = WeatherData.fromJson(json, city: placeName);
+      _cache[cacheKey] = weather;
+      return weather;
     } else {
-      throw Exception('Failed to fetch weather data: ${response.statusCode}, ${response.body}');
+      final error = jsonDecode(response.body)['message'] ?? response.body;
+      if (response.statusCode == 401) {
+        throw Exception('Invalid Ambee API key. Verify at api.ambeedata.com.');
+      } else {
+        throw Exception('Failed to fetch weather: ${response.statusCode}, $error');
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _getCoordinatesFromCity(String city) async {
+    final url = Uri.parse('$_googleBaseUrl/json?address=$city&key=$_googleApiKey');
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json['status'] == 'OK' && json['results'].isNotEmpty) {
+        final location = json['results'][0]['geometry']['location'];
+        final placeName = json['results'][0]['formatted_address'] ?? city;
+        return {
+          'lat': location['lat'] as double,
+          'lng': location['lng'] as double,
+          'placeName': placeName,
+        };
+      } else {
+        throw Exception('Place "$city" not found. Try a different name (e.g., Colombo, LK).');
+      }
+    } else {
+      final error = jsonDecode(response.body)['error_message'] ?? response.body;
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('Invalid Google API key. Verify at console.cloud.google.com.');
+      }
+      throw Exception('Failed to fetch coordinates: ${response.statusCode}, $error');
     }
   }
 }
