@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class PostModel {
   final String id;
   final String userName;
@@ -5,7 +7,7 @@ class PostModel {
   final String timeAgo;
   final String content;
   final String? imagePath;
-  final int likes;
+  final ValueNotifier<int> likesNotifier;
   final int comments;
   final int shares;
   final String? location;
@@ -21,7 +23,7 @@ class PostModel {
     required this.timeAgo,
     required this.content,
     this.imagePath,
-    required this.likes,
+    required int likes,
     required this.comments,
     required this.shares,
     this.location,
@@ -29,5 +31,8 @@ class PostModel {
     this.longitude,
     this.placeId,
     this.commentsList = const [],
-  });
+  }) : likesNotifier = ValueNotifier(likes);
+
+  int get likes => likesNotifier.value;
+  set likes(int value) => likesNotifier.value = value;
 }

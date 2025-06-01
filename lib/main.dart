@@ -5,8 +5,10 @@ import 'package:app/pages/market.dart';
 import 'package:app/pages/planner.dart';
 import 'package:app/pages/weather.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
+  await dotenv.load();
   WidgetsFlutterBinding.ensureInitialized();
   await MongoDataBase.connect();
   runApp(const MyApp());

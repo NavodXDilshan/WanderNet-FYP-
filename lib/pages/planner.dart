@@ -30,14 +30,13 @@ class PlannerState extends State<Planner> {
   final TextEditingController _timeConstraintController = TextEditingController();
   final String userEmail = 'k.m.navoddilshan@gmail.com';
   String? selectedOption = 'Max Node';
-  String? selectedStartPlaceId; // Use placeId for uniqueness
-  String? selectedTargetPlaceId; // Use placeId for uniqueness
+  String? selectedStartPlaceId;
+  String? selectedTargetPlaceId;
   List<Map<String, dynamic>> wishlistItems = [];
   final List<String> options = ['Max Node', 'Max Rating', 'Hybrid'];
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
-  bool _useRealRoutes = true; // Toggle for real routes vs straight lines
+  bool _useRealRoutes = true;
 
-  // Map UI options to backend algorithm names
   final Map<String, String> algorithmMapping = {
     'Max Node': 'max_nodes',
     'Max Rating': 'max_score',
@@ -102,7 +101,6 @@ class PlannerState extends State<Planner> {
     try {
       final items = await MongoDataBase.fetchWishlistItems(userEmail);
       print('Loaded wishlist items: ${items.length}');
-      // Deduplicate by placeId
       final seenPlaceIds = <String>{};
       final uniqueItems = items.where((item) {
         final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
@@ -128,6 +126,8 @@ class PlannerState extends State<Planner> {
           position: LatLng(lat, lng),
           infoWindow: InfoWindow(
             title: placeName,
+            snippet: 'Tap to remove',
+            onTap: () => _confirmRemoveMarker(placeId),
           ),
         );
       }).whereType<Marker>().toSet();
@@ -143,11 +143,59 @@ class PlannerState extends State<Planner> {
         }
       });
       print('Markers updated: ${_markers.length}, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
-      print('Wishlist items: ${wishlistItems.map((item) => {'placeId': item['placeId'], 'placeName': item['placeName']})}');
     } catch (e) {
       print('Failed to load wishlist data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load wishlist data: $e')),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoveMarker(String placeId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Marker'),
+        content: const Text('Are you sure you want to remove this marker?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _removeMarker(placeId);
+    }
+  }
+
+  Future<void> _removeMarker(String placeId) async {
+    try {
+      await MongoDataBase.removeWishlistItem(userEmail, placeId);
+      setState(() {
+        wishlistItems.removeWhere((item) => item['placeId'] == placeId);
+        _markers.removeWhere((marker) => marker.markerId.value == placeId);
+        if (selectedStartPlaceId == placeId) {
+          selectedStartPlaceId = wishlistItems.isNotEmpty ? wishlistItems[0]['placeId'] : null;
+        }
+        if (selectedTargetPlaceId == placeId) {
+          selectedTargetPlaceId = wishlistItems.isNotEmpty ? wishlistItems[0]['placeId'] : null;
+        }
+      });
+      print('Marker removed: $placeId');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Marker removed: $placeId')),
+      );
+    } catch (e) {
+      print('Error removing marker: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove marker: $e')),
       );
     }
   }
@@ -175,13 +223,10 @@ class PlannerState extends State<Planner> {
           final encodedPolyline = data['routes'][0]['overview_polyline']['points'];
           final points = polylinePoints.decodePolyline(encodedPolyline);
           allPoints.addAll(points.map((point) => LatLng(point.latitude, point.longitude)));
-          print('Fetched directions from ${origin.latitude},${origin.longitude} to ${destination.latitude},${destination.longitude}: ${points.length} points');
         } else {
-          print('Directions API error: ${data['status']}');
           throw Exception('Directions API error: ${data['status']}');
         }
       } else {
-        print('Directions API HTTP error: ${result.statusCode}');
         throw Exception('Directions API HTTP error: ${result.statusCode}');
       }
     }
@@ -191,9 +236,7 @@ class PlannerState extends State<Planner> {
 
   Future<void> _calculateRoute() async {
     try {
-      print('Starting route calculation...');
       if (wishlistItems.length < 2) {
-        print('Error: Less than 2 locations in wishlist');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('At least two locations are required for route optimization')),
         );
@@ -203,17 +246,14 @@ class PlannerState extends State<Planner> {
       final timeLimitText = _timeConstraintController.text;
       final timeLimitHours = double.tryParse(timeLimitText);
       if (timeLimitHours == null || timeLimitHours <= 0) {
-        print('Error: Invalid time constraint: $timeLimitText');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please enter a valid time constraint (in hours)')),
         );
         return;
       }
       final timeLimitMinutes = timeLimitHours * 60;
-      print('Time constraint: $timeLimitHours hours ($timeLimitMinutes minutes)');
 
       if (selectedStartPlaceId == null || selectedTargetPlaceId == null) {
-        print('Error: Start or target not selected');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select start and target locations')),
         );
@@ -221,7 +261,6 @@ class PlannerState extends State<Planner> {
       }
 
       if (selectedStartPlaceId == selectedTargetPlaceId) {
-        print('Error: Start and target are the same: $selectedStartPlaceId');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Start and target locations must be different')),
         );
@@ -232,7 +271,6 @@ class PlannerState extends State<Planner> {
       final targetIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedTargetPlaceId);
 
       if (startIndex == -1 || targetIndex == -1) {
-        print('Error: Invalid start or target index. Start: $startIndex, Target: $targetIndex');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Invalid start or target location')),
         );
@@ -242,10 +280,7 @@ class PlannerState extends State<Planner> {
       final locations = wishlistItems
           .asMap()
           .entries
-          .where((entry) {
-            final item = entry.value;
-            return item['latitude'] != null && item['longitude'] != null;
-          })
+          .where((entry) => entry.value['latitude'] != null && entry.value['longitude'] != null)
           .map((entry) => {
                 'lat': entry.value['latitude'] as double,
                 'lng': entry.value['longitude'] as double,
@@ -276,29 +311,21 @@ class PlannerState extends State<Planner> {
         'algorithm': algorithmMapping[selectedOption] ?? 'max_nodes',
       };
 
-      print('Sending payload to backend: ${jsonEncode(payload)}');
-
       final response = await http.post(
-        Uri.parse('http://192.168.1.3:8000/optimize_route'),
+        Uri.parse('http://192.168.160.67:8000/optimize_route'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
-
-      print('Backend response status: ${response.statusCode}');
-      print('Backend response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final route = List<int>.from(data['route']);
         if (route.isEmpty) {
-          print('Error: No valid route returned from backend');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('No valid route found')),
           );
           return;
         }
-
-        print('Route received: $route');
 
         final waypoints = route.map((index) {
           final item = wishlistItems[index];
@@ -315,7 +342,7 @@ class PlannerState extends State<Planner> {
           );
           polylinePoints = await _getDirections(waypoints);
         } else {
-          polylinePoints = waypoints; // Straight lines
+          polylinePoints = waypoints;
         }
 
         setState(() {
@@ -347,19 +374,16 @@ class PlannerState extends State<Planner> {
           );
         }
 
-        print('Polyline updated with ${polylinePoints.length} points');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Route calculated and displayed')),
         );
       } else {
         final error = jsonDecode(response.body)['detail'] ?? 'Unknown error';
-        print('Backend error: $error');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to calculate route: $error')),
         );
       }
     } catch (e) {
-      print('Error in calculateRoute: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error calculating route: $e')),
       );
@@ -421,13 +445,11 @@ class PlannerState extends State<Planner> {
           );
           print('Marker added: ${prediction.description} at ($lat, $lng)');
         } else {
-          print('Invalid coordinates for marker: ${prediction.description}');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invalid coordinates for selected place')),
           );
         }
       } else {
-        print('No coordinates for marker: ${prediction.description}');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No coordinates available for selected place')),
         );
@@ -450,25 +472,21 @@ class PlannerState extends State<Planner> {
             'placeId': prediction.placeId,
             'createdAt': DateTime.now().toIso8601String(),
           });
-          print('Saved to wishlist: ${prediction.description}');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Added ${prediction.description} to wishlist')),
           );
           _loadWishlistData();
         } else {
-          print('Invalid coordinates for wishlist: ${prediction.description}');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invalid coordinates for wishlist')),
           );
         }
       } else {
-        print('No coordinates for wishlist: ${prediction.description}');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No coordinates available for wishlist')),
         );
       }
     } catch (e) {
-      print('Error saving to wishlist: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add to wishlist: $e')),
       );
