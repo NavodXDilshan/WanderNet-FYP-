@@ -16,7 +16,7 @@ class CategoryModel {
     List<CategoryModel> categories = [];
     categories.add(
       CategoryModel(
-        name: 'Urban', 
+        name: 'Hotels', 
         iconPath:'assets/icons/urban.svg' , 
         boxColor: Color(0xff92A3FD)
     ));
@@ -30,7 +30,7 @@ class CategoryModel {
       
       categories.add(
       CategoryModel(
-        name: 'Religious', 
+        name: 'Entertainment', 
         iconPath:'assets/icons/sites.svg' , 
         boxColor: Color(0xff92A3FD)
     ));

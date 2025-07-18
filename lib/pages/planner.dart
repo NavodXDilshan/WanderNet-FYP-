@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:google_places_flutter/google_places_flutter.dart';
@@ -30,14 +31,14 @@ class PlannerState extends State<Planner> {
   final TextEditingController _timeConstraintController = TextEditingController();
   final String userEmail = 'k.m.navoddilshan@gmail.com';
   String? selectedOption = 'Max Node';
-  String? selectedStartPlaceId; // Use placeId for uniqueness
-  String? selectedTargetPlaceId; // Use placeId for uniqueness
+  String? selectedStartPlaceId;
+  String? selectedTargetPlaceId;
   List<Map<String, dynamic>> wishlistItems = [];
+  List<Map<String, dynamic>> nearbyAttractions = [];
   final List<String> options = ['Max Node', 'Max Rating', 'Hybrid'];
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
-  bool _useRealRoutes = true; // Toggle for real routes vs straight lines
+  bool _useRealRoutes = true;
 
-  // Map UI options to backend algorithm names
   final Map<String, String> algorithmMapping = {
     'Max Node': 'max_nodes',
     'Max Rating': 'max_score',
@@ -102,7 +103,6 @@ class PlannerState extends State<Planner> {
     try {
       final items = await MongoDataBase.fetchWishlistItems(userEmail);
       print('Loaded wishlist items: ${items.length}');
-      // Deduplicate by placeId
       final seenPlaceIds = <String>{};
       final uniqueItems = items.where((item) {
         final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
@@ -143,11 +143,62 @@ class PlannerState extends State<Planner> {
         }
       });
       print('Markers updated: ${_markers.length}, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
-      print('Wishlist items: ${wishlistItems.map((item) => {'placeId': item['placeId'], 'placeName': item['placeName']})}');
     } catch (e) {
       print('Failed to load wishlist data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load wishlist data: $e')),
+      );
+    }
+  }
+
+  Future<void> _fetchNearbyAttractions(List<LatLng> waypoints) async {
+    try {
+      setState(() {
+        nearbyAttractions = [];
+      });
+      final seenPlaceIds = <String>{};
+      final attractions = <Map<String, dynamic>>[];
+
+      for (final waypoint in waypoints) {
+        final response = await http.get(
+          Uri.parse(
+            'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+            '?location=${waypoint.latitude},${waypoint.longitude}'
+            '&radius=5000&type=tourist_attraction&key=$googleApiKey',
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['status'] == 'OK') {
+            for (var result in data['results']) {
+              final placeId = result['place_id'] as String?;
+              if (placeId == null || seenPlaceIds.contains(placeId)) continue;
+              seenPlaceIds.add(placeId);
+              attractions.add({
+                'placeId': placeId,
+                'name': result['name'] as String? ?? 'Unknown Attraction',
+                'latitude': result['geometry']['location']['lat'] as double?,
+                'longitude': result['geometry']['location']['lng'] as double?,
+                'rating': result['rating']?.toDouble() ?? 0.0,
+              });
+            }
+          } else {
+            print('Nearby search API error: ${data['status']}');
+          }
+        } else {
+          print('Nearby search HTTP error: ${response.statusCode}');
+        }
+      }
+
+      setState(() {
+        nearbyAttractions = attractions;
+      });
+      print('Fetched ${nearbyAttractions.length} nearby attractions');
+    } catch (e) {
+      print('Error fetching nearby attractions: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to fetch nearby attractions: $e')),
       );
     }
   }
@@ -210,7 +261,6 @@ class PlannerState extends State<Planner> {
         return;
       }
       final timeLimitMinutes = timeLimitHours * 60;
-      print('Time constraint: $timeLimitHours hours ($timeLimitMinutes minutes)');
 
       if (selectedStartPlaceId == null || selectedTargetPlaceId == null) {
         print('Error: Start or target not selected');
@@ -242,10 +292,7 @@ class PlannerState extends State<Planner> {
       final locations = wishlistItems
           .asMap()
           .entries
-          .where((entry) {
-            final item = entry.value;
-            return item['latitude'] != null && item['longitude'] != null;
-          })
+          .where((entry) => entry.value['latitude'] != null && entry.value['longitude'] != null)
           .map((entry) => {
                 'lat': entry.value['latitude'] as double,
                 'lng': entry.value['longitude'] as double,
@@ -279,7 +326,7 @@ class PlannerState extends State<Planner> {
       print('Sending payload to backend: ${jsonEncode(payload)}');
 
       final response = await http.post(
-        Uri.parse('http://192.168.1.3:8000/optimize_route'),
+        Uri.parse('http://192.168.1.2:8000/optimize_route'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
@@ -305,6 +352,9 @@ class PlannerState extends State<Planner> {
           return LatLng(item['latitude'] as double, item['longitude'] as double);
         }).toList();
 
+        // Fetch nearby attractions for the route
+        await _fetchNearbyAttractions(waypoints);
+
         List<LatLng> polylinePoints;
         if (_useRealRoutes) {
           setState(() {
@@ -315,7 +365,7 @@ class PlannerState extends State<Planner> {
           );
           polylinePoints = await _getDirections(waypoints);
         } else {
-          polylinePoints = waypoints; // Straight lines
+          polylinePoints = waypoints;
         }
 
         setState(() {
@@ -362,6 +412,40 @@ class PlannerState extends State<Planner> {
       print('Error in calculateRoute: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error calculating route: $e')),
+      );
+    }
+  }
+
+  Future<void> _addAttractionToWishlist(Map<String, dynamic> attraction) async {
+    try {
+      final lat = attraction['latitude'] as double?;
+      final lng = attraction['longitude'] as double?;
+      if (lat == null || lng == null) {
+        print('Invalid coordinates for attraction: ${attraction['name']}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid coordinates for attraction')),
+        );
+        return;
+      }
+
+      await MongoDataBase.insertWishlistItem(userEmail, {
+        'placeName': attraction['name'] as String? ?? 'Unknown Attraction',
+        'latitude': lat,
+        'longitude': lng,
+        'placeId': attraction['placeId'] as String?,
+        'rating': attraction['rating'] as double?,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      print('Added attraction to wishlist: ${attraction['name']}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added ${attraction['name']} to wishlist')),
+      );
+      await _loadWishlistData();
+    } catch (e) {
+      print('Error adding attraction to wishlist: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add to wishlist: $e')),
       );
     }
   }
@@ -494,6 +578,14 @@ class PlannerState extends State<Planner> {
         useRealRoutes: _useRealRoutes,
         onRouteTypeChanged: _toggleRouteType,
       ),
+      endDrawer: NearbyAttractionsDrawer(
+        nearbyAttractions: nearbyAttractions,
+        onAddToWishlist: _addAttractionToWishlist,
+        onRecalculate: () {
+          Navigator.pop(context); // Close drawer
+          _calculateRoute();
+        },
+      ),
       body: Stack(
         children: [
           GoogleMap(
@@ -537,7 +629,10 @@ class PlannerState extends State<Planner> {
 
   AppBar appBar() {
     return AppBar(
-      title: const Text('Plan Your Tour'),
+      title: const Text(
+        'Plan Your Tour',
+        style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+      ),
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       centerTitle: true,
       leading: IconButton(
@@ -546,6 +641,27 @@ class PlannerState extends State<Planner> {
           _scaffoldKey.currentState?.openDrawer();
         },
       ),
+      actions: [
+        GestureDetector(
+          onTap: () {
+            _scaffoldKey.currentState?.openEndDrawer();
+          },
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            alignment: Alignment.center,
+            width: 20,
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(255, 240, 144, 9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: SvgPicture.asset(
+              'assets/icons/dots.svg',
+              width: 20,
+              height: 20,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -712,7 +828,7 @@ class DrawerBar extends StatelessWidget {
                 labelText: 'Time Constraint (hours)',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
           ),
           Padding(
@@ -728,6 +844,75 @@ class DrawerBar extends StatelessWidget {
                 minimumSize: const Size(double.infinity, 50),
               ),
               child: const Text('Calculate'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class NearbyAttractionsDrawer extends StatelessWidget {
+  final List<Map<String, dynamic>> nearbyAttractions;
+  final Function(Map<String, dynamic>) onAddToWishlist;
+  final VoidCallback onRecalculate;
+
+  const NearbyAttractionsDrawer({
+    super.key,
+    required this.nearbyAttractions,
+    required this.onAddToWishlist,
+    required this.onRecalculate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 240, 144, 9),
+            ),
+            child: const Text(
+              'Nearby Attractions',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+              ),
+            ),
+          ),
+          if (nearbyAttractions.isEmpty)
+            const ListTile(
+              title: Text('No nearby attractions found'),
+              subtitle: Text('Calculate a route to find attractions'),
+            ),
+          ...nearbyAttractions.map((attraction) {
+            return ListTile(
+              title: Text(
+                attraction['name'] ?? 'Unknown Attraction',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                'Rating: ${attraction['rating']?.toStringAsFixed(1) ?? 'N/A'}',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.add, color: Colors.green),
+                onPressed: () => onAddToWishlist(attraction),
+              ),
+            );
+          }).toList(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ElevatedButton(
+              onPressed: onRecalculate,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              child: const Text('Recalculate Route'),
             ),
           ),
         ],

@@ -343,26 +343,35 @@ class _FeedState extends State<Feed> {
                             _buildInteractionButton(
                               icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
                               icolor: likeColor,
-                              label: "Like",
-                              onTap: isLiked
-                                  ? () {} // Ignore tap if already liked
-                                  : () {
-                                      setCardState(() {
-                                        isLiked = true;
-                                        likeColor = Colors.red;
-                                      });
-                                      MongoDataBase.likePost(post.id, currentUserId).then((_) {
-                                        setState(() {}); // Refresh to update likes count
-                                      }).catchError((e) {
-                                        setCardState(() {
-                                          isLiked = false;
-                                          likeColor = Colors.grey[600]!;
-                                        });
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text("Error liking post: $e")),
-                                        );
-                                      });
-                                    },
+                              label: isLiked ? "Unlike" : "Like",
+                              onTap: () async {
+                                try {
+                                  setCardState(() {
+                                    isLiked = !isLiked;
+                                    likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+                                  });
+                                  if (isLiked) {
+                                    await MongoDataBase.likePost(post.id, currentUserId);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Post liked")),
+                                    );
+                                  } else {
+                                    await MongoDataBase.unlikePost(post.id, currentUserId);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Post unliked")),
+                                    );
+                                  }
+                                  setState(() {}); // Refresh to update likes count
+                                } catch (e) {
+                                  setCardState(() {
+                                    isLiked = !isLiked; // Revert state on error
+                                    likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Error ${isLiked ? 'liking' : 'unliking'} post: $e")),
+                                  );
+                                }
+                              },
                             ),
                             _buildInteractionButton(
                               icon: Icons.comment_outlined,
@@ -378,37 +387,46 @@ class _FeedState extends State<Feed> {
                             _buildInteractionButton(
                               icon: Icons.add_location_alt,
                               icolor: shareColor,
-                              label: "Add",
-                              onTap: isShared
-                                  ? () {} // Ignore tap if already added
-                                  : () async {
-                                      if (post.location == null || post.latitude == null || post.longitude == null) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("No location data available for this post")),
-                                        );
-                                        return;
-                                      }
-                                      try {
-                                        await MongoDataBase.insertWishlistItem(userEmail, {
-                                          'placeName': post.location,
-                                          'latitude': post.latitude,
-                                          'longitude': post.longitude,
-                                          'placeId': post.placeId ?? '',
-                                          'createdAt': DateTime.now().toIso8601String(),
-                                        });
-                                        setCardState(() {
-                                          isShared = true;
-                                          shareColor = Colors.green;
-                                        });
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text("Added ${post.location} to wishlist")),
-                                        );
-                                      } catch (e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text("Failed to add to wishlist: $e")),
-                                        );
-                                      }
-                                    },
+                              label: isShared ? "Remove" : "Add",
+                              onTap: () async {
+                                if (post.location == null || post.latitude == null || post.longitude == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("No location data available for this post")),
+                                  );
+                                  return;
+                                }
+                                try {
+                                  setCardState(() {
+                                    isShared = !isShared;
+                                    shareColor = isShared ? Colors.green : Colors.grey[600]!;
+                                  });
+                                  if (isShared) {
+                                    await MongoDataBase.insertWishlistItem(userEmail, {
+                                      'placeName': post.location,
+                                      'latitude': post.latitude,
+                                      'longitude': post.longitude,
+                                      'placeId': post.placeId ?? '',
+                                      'createdAt': DateTime.now().toIso8601String(),
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("Added ${post.location} to wishlist")),
+                                    );
+                                  } else {
+                                    await MongoDataBase.removeWishlistItem(userEmail, post.placeId ?? '');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("Removed ${post.location} from wishlist")),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setCardState(() {
+                                    isShared = !isShared; // Revert state on error
+                                    shareColor = isShared ? Colors.green : Colors.grey[600]!;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Failed to ${isShared ? 'add to' : 'remove from'} wishlist: $e")),
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),

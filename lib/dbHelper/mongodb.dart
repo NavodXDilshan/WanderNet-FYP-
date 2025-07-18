@@ -32,9 +32,9 @@ class MongoDataBase {
 
   static Future<List<Map<String, dynamic>>> fetchPosts() async {
     try {
-    final posts = await _postsCollection
-      .find(where.sortBy('createdAt', descending: true))
-      .toList();
+      final posts = await _postsCollection
+          .find(where.sortBy('createdAt', descending: true))
+          .toList();
       return posts.cast<Map<String, dynamic>>();
     } catch (e) {
       print('Error fetching posts: $e');
@@ -53,6 +53,21 @@ class MongoDataBase {
       );
     } catch (e) {
       print('Error liking post: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> unlikePost(String postId, String userId) async {
+    try {
+      await _postsCollection.update(
+        where.eq('_id', ObjectId.fromHexString(postId)),
+        {
+          '\$inc': {'likes': -1},
+          '\$pull': {'likedBy': userId}
+        },
+      );
+    } catch (e) {
+      print('Error unliking post: $e');
       rethrow;
     }
   }
@@ -103,6 +118,16 @@ class MongoDataBase {
       await collection.insert(wishlistData);
     } catch (e) {
       print('Error inserting wishlist item: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> removeWishlistItem(String userEmail, String placeId) async {
+    try {
+      final collection = _dbWishlist.collection(userEmail);
+      await collection.remove(where.eq('placeId', placeId));
+    } catch (e) {
+      print('Error removing wishlist item: $e');
       rethrow;
     }
   }
