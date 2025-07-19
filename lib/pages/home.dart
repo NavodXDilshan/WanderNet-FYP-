@@ -5,6 +5,9 @@ import 'package:app/models/wild_model.dart';
 import 'package:app/models/entertainment_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -53,6 +56,7 @@ class _HomepageState extends State<Homepage> {
     });
     try {
       hotels = await HotelLocationModel.getHotelLocations();
+      print('Fetched hotels: ${hotels.length}');
     } catch (e) {
       print('Error loading hotels: $e');
       hotels = [];
@@ -312,61 +316,65 @@ class _HomepageState extends State<Homepage> {
     if (beaches.isEmpty) {
       return const Center(child: Text('No beaches found.'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: beaches.length,
-      itemBuilder: (context, index) {
-        final beach = beaches[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          elevation: 2,
-          child: ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LocationDetailPage(
-                    name: beach.name,
-                    imageUrl: beach.imageUrl,
-                    description: beach.description,
-                    rating: beach.rating,
+    return SizedBox(
+      height: 400,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: beaches.length,
+        itemBuilder: (context, index) {
+          final beach = beaches[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            elevation: 2,
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LocationDetailPage(
+                      name: beach.name,
+                      imageUrl: beach.imageUrl,
+                      description: beach.description,
+                      rating: beach.rating,
+                      category: 'beaches',
+                    ),
                   ),
-                ),
-              );
-            },
-            leading: beach.imageUrl != null
-                ? Image.network(
-                    beach.imageUrl!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
+                );
+              },
+              leading: beach.imageUrl != null
+                  ? Image.network(
+                      beach.imageUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.image_not_supported,
+                        size: 40,
+                      ),
+                    )
+                  : const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-                  )
-                : const Icon(
-                    Icons.image_not_supported,
-                    size: 40,
+              title: Text(
+                beach.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rating: ${beach.rating ?? 'N/A'}'),
+                  Text(
+                    beach.description ?? 'No description available',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-            title: Text(
-              beach.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+                ],
+              ),
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rating: ${beach.rating ?? 'N/A'}'),
-                Text(
-                  beach.description ?? 'No description available',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -374,61 +382,66 @@ class _HomepageState extends State<Homepage> {
     if (hotels.isEmpty) {
       return const Center(child: Text('No hotels found.'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: hotels.length,
-      itemBuilder: (context, index) {
-        final hotel = hotels[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          elevation: 2,
-          child: ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LocationDetailPage(
-                    name: hotel.name,
-                    imageUrl: hotel.imageUrl,
-                    description: hotel.description,
-                    rating: hotel.rating,
+    return SizedBox(
+      height: 400,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: hotels.length,
+        itemBuilder: (context, index) {
+          final hotel = hotels[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            elevation: 2,
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LocationDetailPage(
+                      name: hotel.name,
+                      imageUrl: hotel.imageUrl,
+                      description: hotel.description,
+                      rating: hotel.rating,
+                      category: 'hotels',
+                      // city: hotel.city != null && hotel.city!.isNotEmpty ? hotel.city : 'Colombo',
+                    ),
                   ),
-                ),
-              );
-            },
-            leading: hotel.imageUrl != null
-                ? Image.network(
-                    hotel.imageUrl!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
+                );
+              },
+              leading: hotel.imageUrl != null
+                  ? Image.network(
+                      hotel.imageUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.image_not_supported,
+                        size: 40,
+                      ),
+                    )
+                  : const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-                  )
-                : const Icon(
-                    Icons.image_not_supported,
-                    size: 40,
+              title: Text(
+                hotel.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rating: ${hotel.rating ?? 'N/A'}'),
+                  Text(
+                    hotel.description ?? 'No description available',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-            title: Text(
-              hotel.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+                ],
+              ),
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rating: ${hotel.rating ?? 'N/A'}'),
-                Text(
-                  hotel.description ?? 'No description available',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -436,61 +449,65 @@ class _HomepageState extends State<Homepage> {
     if (wildLocations.isEmpty) {
       return const Center(child: Text('No wildlife locations found.'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: wildLocations.length,
-      itemBuilder: (context, index) {
-        final wild = wildLocations[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          elevation: 2,
-          child: ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LocationDetailPage(
-                    name: wild.name,
-                    imageUrl: wild.imageUrl,
-                    description: wild.description,
-                    rating: wild.rating,
+    return SizedBox(
+      height: 400,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: wildLocations.length,
+        itemBuilder: (context, index) {
+          final wild = wildLocations[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            elevation: 2,
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LocationDetailPage(
+                      name: wild.name,
+                      imageUrl: wild.imageUrl,
+                      description: wild.description,
+                      rating: wild.rating,
+                      category: 'wildlife',
+                    ),
                   ),
-                ),
-              );
-            },
-            leading: wild.imageUrl != null
-                ? Image.network(
-                    wild.imageUrl!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
+                );
+              },
+              leading: wild.imageUrl != null
+                  ? Image.network(
+                      wild.imageUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.image_not_supported,
+                        size: 40,
+                      ),
+                    )
+                  : const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-                  )
-                : const Icon(
-                    Icons.image_not_supported,
-                    size: 40,
+              title: Text(
+                wild.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rating: ${wild.rating ?? 'N/A'}'),
+                  Text(
+                    wild.description ?? 'No description available',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-            title: Text(
-              wild.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+                ],
+              ),
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rating: ${wild.rating ?? 'N/A'}'),
-                Text(
-                  wild.description ?? 'No description available',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -498,61 +515,65 @@ class _HomepageState extends State<Homepage> {
     if (entertainmentLocations.isEmpty) {
       return const Center(child: Text('No entertainment locations found.'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: entertainmentLocations.length,
-      itemBuilder: (context, index) {
-        final entertainment = entertainmentLocations[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          elevation: 2,
-          child: ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LocationDetailPage(
-                    name: entertainment.name,
-                    imageUrl: entertainment.imageUrl,
-                    description: entertainment.description,
-                    rating: entertainment.rating,
+    return SizedBox(
+      height: 400,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: entertainmentLocations.length,
+        itemBuilder: (context, index) {
+          final entertainment = entertainmentLocations[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            elevation: 2,
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LocationDetailPage(
+                      name: entertainment.name,
+                      imageUrl: entertainment.imageUrl,
+                      description: entertainment.description,
+                      rating: entertainment.rating,
+                      category: 'entertainment',
+                    ),
                   ),
-                ),
-              );
-            },
-            leading: entertainment.imageUrl != null
-                ? Image.network(
-                    entertainment.imageUrl!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
+                );
+              },
+              leading: entertainment.imageUrl != null
+                  ? Image.network(
+                      entertainment.imageUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.image_not_supported,
+                        size: 40,
+                      ),
+                    )
+                  : const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-                  )
-                : const Icon(
-                    Icons.image_not_supported,
-                    size: 40,
+              title: Text(
+                entertainment.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rating: ${entertainment.rating ?? 'N/A'}'),
+                  Text(
+                    entertainment.description ?? 'No description available',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-            title: Text(
-              entertainment.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+                ],
+              ),
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rating: ${entertainment.rating ?? 'N/A'}'),
-                Text(
-                  entertainment.description ?? 'No description available',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -562,6 +583,8 @@ class LocationDetailPage extends StatelessWidget {
   final String? imageUrl;
   final String? description;
   final String? rating;
+  final String? category;
+  final String? city;
 
   const LocationDetailPage({
     super.key,
@@ -569,7 +592,46 @@ class LocationDetailPage extends StatelessWidget {
     this.imageUrl,
     this.description,
     this.rating,
+    this.category,
+    this.city,
   });
+
+  Future<void> _launchURL(String url, BuildContext context) async {
+    print('Attempting to launch URL: $url'); // Debug log
+    if (await canLaunchUrl(Uri.parse(url))) {
+      try {
+        await launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication, // Force external browser
+        );
+      } catch (e) {
+        print('Launch error: $e'); // Detailed error log
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch URL')),
+        );
+      }
+    } else {
+      print('Failed to launch URL: $url - CanLaunch returned false'); // Enhanced debug
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch URL')),
+      );
+    }
+  }
+
+  String _getBookingUrl(String platform) {
+    final encodedName = Uri.encodeComponent(name);
+    final encodedCity = city != null && city!.isNotEmpty && city != name ? Uri.encodeComponent(city!) : 'Colombo';
+    switch (platform.toLowerCase()) {
+      case 'tripadvisor':
+        return 'https://www.tripadvisor.com/Search?q=$encodedName%20$encodedCity';
+      case 'airbnb':
+        return 'https://www.airbnb.com/s/$encodedName--$encodedCity';
+      case 'booking.com':
+        return 'https://www.booking.com/searchresults.html?ss=$encodedName,$encodedCity';
+      default:
+        return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -656,41 +718,87 @@ class LocationDetailPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
                   Container(
-                    padding: EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(10),
                     width: 350,
-                    // height: 200,
                     decoration: BoxDecoration(
                       color: const Color.fromARGB(255, 231, 169, 93),
                       borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
-                                  color: Colors.grey,
-                                  spreadRadius: 2,
-                                  blurRadius: 2,
-                                  offset: Offset(0, 1), 
+                          color: Colors.grey,
+                          spreadRadius: 2,
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
                         )
-                      ]
-        
-                      
+                      ],
                     ),
                     child: Text(
-                    textAlign: TextAlign.center,
-                    description ?? 'No description available',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.black87,
-                    ),
+                      textAlign: TextAlign.center,
+                      description ?? 'No description available',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                    ],
-                  ),
-
-
+                  if (category?.toLowerCase() == 'hotels') ...[
+                    const SizedBox(height: 16),
+                    Column(
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _launchURL(_getBookingUrl('TripAdvisor'), context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          child: const Text(
+                            'Book on TripAdvisor',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () => _launchURL('https://www.google.com', context), // Diagnostic test
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          child: const Text(
+                            'Test Browser',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () => _launchURL(_getBookingUrl('Booking.com'), context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          child: const Text(
+                            'Book on Booking.com',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

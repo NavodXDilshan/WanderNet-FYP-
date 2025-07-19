@@ -1,29 +1,92 @@
-import 'package:mongo_dart/mongo_dart.dart';
+import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:app/dbHelper/constant.dart';
 
 class MongoDataBase {
-  static late Db _dbPosts;
-  static late Db _dbWishlist;
-  static late DbCollection _postsCollection;
-  static late DbCollection _wishlistCollection;
+  static mongo.Db? _dbPosts;
+  static mongo.Db? _dbWishlist;
+  static mongo.Db? _dbMarket;
+  static mongo.Db? _dbChats;
+  static mongo.DbCollection? _postsCollection;
+  static mongo.DbCollection? _wishlistCollection;
+  static mongo.DbCollection? _marketCollection;
+  static mongo.DbCollection? _chatCollection;
+  static bool _isConnected = false;
+  static bool _isChatsConnected = false;
 
   static Future<void> connect() async {
     try {
-      _dbPosts = await Db.create(MONGO_URL_posts);
-      _dbWishlist = await Db.create(MONGO_URL_wishlist);
-      await _dbPosts.open();
-      await _dbWishlist.open();
-      _postsCollection = _dbPosts.collection('posts');
-      _wishlistCollection = _dbWishlist.collection('k.m.navoddilshan');
+      if (_isConnected) return;
+
+      _dbPosts = await mongo.Db.create(MONGO_URL_posts);
+      _dbWishlist = await mongo.Db.create(MONGO_URL_wishlist);
+      _dbMarket = await mongo.Db.create(MONGO_URL_market);
+      await _dbPosts!.open();
+      await _dbWishlist!.open();
+      await _dbMarket!.open();
+      _postsCollection = _dbPosts!.collection('posts');
+      _wishlistCollection = _dbWishlist!.collection('k.m.navoddilshan@gmail.com');
+      _marketCollection = _dbMarket!.collection(COLLECTION_NAME_MARKET);
+      _isConnected = true;
+      print('MongoDB connected successfully');
     } catch (e) {
       print('MongoDB connection error: $e');
       rethrow;
     }
   }
 
-  static Future<void> insertPost(Map<String, dynamic> postData) async {
+  static Future<void> connectToChats() async {
     try {
-      await _postsCollection.insert(postData);
+      if (_isChatsConnected) return;
+
+      _dbChats = await mongo.Db.create(MONGO_URL_chats);
+      await _dbChats!.open();
+      _isChatsConnected = true;
+      print('MongoDB chats database connected successfully');
+    } catch (e) {
+      print('Error connecting to chats MongoDB: $e');
+      rethrow;
+    }
+  }
+
+  static void _ensureInitialized() {
+    if (!_isConnected || _marketCollection == null || _postsCollection == null || _wishlistCollection == null) {
+      throw StateError('MongoDataBase is not initialized. Call connect() first.');
+    }
+  }
+
+  static void _ensureChatsInitialized() {
+    if (!_isChatsConnected || _dbChats == null) {
+      throw StateError('Chats database is not initialized. Call connectToChats() first.');
+    }
+  }
+
+  static Future<void> insertMarketItem(Map<String, dynamic> itemData) async {
+    _ensureInitialized();
+    try {
+      await _marketCollection!.insert(itemData);
+    } catch (e) {
+      print('Error inserting market item: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchMarketItems() async {
+    _ensureInitialized();
+    try {
+      final items = await _marketCollection!
+          .find(mongo.where.sortBy('createdAt', descending: true))
+          .toList();
+      return items.cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching market items: $e');
+      return [];
+    }
+  }
+
+  static Future<void> insertPost(Map<String, dynamic> postData) async {
+    _ensureInitialized();
+    try {
+      await _postsCollection!.insert(postData);
     } catch (e) {
       print('Error inserting post: $e');
       rethrow;
@@ -31,9 +94,10 @@ class MongoDataBase {
   }
 
   static Future<List<Map<String, dynamic>>> fetchPosts() async {
+    _ensureInitialized();
     try {
-      final posts = await _postsCollection
-          .find(where.sortBy('createdAt', descending: true))
+      final posts = await _postsCollection!
+          .find(mongo.where.sortBy('createdAt', descending: true))
           .toList();
       return posts.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -43,9 +107,10 @@ class MongoDataBase {
   }
 
   static Future<void> likePost(String postId, String userId) async {
+    _ensureInitialized();
     try {
-      await _postsCollection.update(
-        where.eq('_id', ObjectId.fromHexString(postId)),
+      await _postsCollection!.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)),
         {
           '\$inc': {'likes': 1},
           '\$addToSet': {'likedBy': userId}
@@ -58,9 +123,10 @@ class MongoDataBase {
   }
 
   static Future<void> unlikePost(String postId, String userId) async {
+    _ensureInitialized();
     try {
-      await _postsCollection.update(
-        where.eq('_id', ObjectId.fromHexString(postId)),
+      await _postsCollection!.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)),
         {
           '\$inc': {'likes': -1},
           '\$pull': {'likedBy': userId}
@@ -73,9 +139,10 @@ class MongoDataBase {
   }
 
   static Future<bool> hasUserLiked(String postId, String userId) async {
+    _ensureInitialized();
     try {
-      final post = await _postsCollection.findOne(
-        where.eq('_id', ObjectId.fromHexString(postId)).eq('likedBy', userId),
+      final post = await _postsCollection!.findOne(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)).eq('likedBy', userId),
       );
       return post != null;
     } catch (e) {
@@ -85,9 +152,10 @@ class MongoDataBase {
   }
 
   static Future<void> incrementComments(String postId) async {
+    _ensureInitialized();
     try {
-      await _postsCollection.update(
-        where.eq('_id', ObjectId.fromHexString(postId)),
+      await _postsCollection!.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)),
         {
           '\$inc': {'comments': 1}
         },
@@ -99,9 +167,10 @@ class MongoDataBase {
   }
 
   static Future<void> incrementShares(String postId) async {
+    _ensureInitialized();
     try {
-      await _postsCollection.update(
-        where.eq('_id', ObjectId.fromHexString(postId)),
+      await _postsCollection!.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)),
         {
           '\$inc': {'shares': 1}
         },
@@ -113,8 +182,9 @@ class MongoDataBase {
   }
 
   static Future<void> insertWishlistItem(String userEmail, Map<String, dynamic> wishlistData) async {
+    _ensureInitialized();
     try {
-      final collection = _dbWishlist.collection(userEmail);
+      final collection = _dbWishlist!.collection(userEmail);
       await collection.insert(wishlistData);
     } catch (e) {
       print('Error inserting wishlist item: $e');
@@ -123,9 +193,10 @@ class MongoDataBase {
   }
 
   static Future<void> removeWishlistItem(String userEmail, String placeId) async {
+    _ensureInitialized();
     try {
-      final collection = _dbWishlist.collection(userEmail);
-      await collection.remove(where.eq('placeId', placeId));
+      final collection = _dbWishlist!.collection(userEmail);
+      await collection.remove(mongo.where.eq('placeId', placeId));
     } catch (e) {
       print('Error removing wishlist item: $e');
       rethrow;
@@ -133,8 +204,9 @@ class MongoDataBase {
   }
 
   static Future<List<Map<String, dynamic>>> fetchWishlistItems(String userEmail) async {
+    _ensureInitialized();
     try {
-      final collection = _dbWishlist.collection(userEmail);
+      final collection = _dbWishlist!.collection(userEmail);
       final items = await collection.find().toList();
       return items.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -144,8 +216,9 @@ class MongoDataBase {
   }
 
   static Future<void> updateWishlistItem(String userEmail, String itemId, double? rating, double? switchWeight) async {
+    _ensureInitialized();
     try {
-      final collection = _dbWishlist.collection(userEmail);
+      final collection = _dbWishlist!.collection(userEmail);
       final updateFields = <String, dynamic>{};
       if (rating != null) {
         updateFields['rating'] = rating;
@@ -154,7 +227,7 @@ class MongoDataBase {
         updateFields['switchWeight'] = switchWeight;
       }
       await collection.update(
-        where.eq('_id', ObjectId.fromHexString(itemId)),
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(itemId)),
         {'\$set': updateFields},
       );
     } catch (e) {
@@ -164,6 +237,7 @@ class MongoDataBase {
   }
 
   static Future<void> insertComment(String postId, String userId, String userName, String content) async {
+    _ensureInitialized();
     try {
       final comment = {
         'userId': userId,
@@ -172,8 +246,8 @@ class MongoDataBase {
         'createdAt': DateTime.now().toIso8601String(),
       };
 
-      await _postsCollection.update(
-        where.eq('_id', ObjectId.fromHexString(postId)),
+      await _postsCollection!.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)),
         {
           '\$push': {'commentsList': comment},
           '\$inc': {'comments': 1},
@@ -187,8 +261,9 @@ class MongoDataBase {
   }
 
   static Future<List<Map<String, dynamic>>> fetchComments(String postId) async {
+    _ensureInitialized();
     try {
-      final post = await _postsCollection.findOne(where.eq('_id', ObjectId.fromHexString(postId)));
+      final post = await _postsCollection!.findOne(mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)));
       if (post != null && post['commentsList'] != null) {
         return List<Map<String, dynamic>>.from(post['commentsList']);
       }
@@ -197,5 +272,38 @@ class MongoDataBase {
       print('Error fetching comments: $e');
       rethrow;
     }
+  }
+
+  static Future<void> insertChatMessage(String senderEmail, String receiverEmail, Map<String, dynamic> message) async {
+    try {
+      _ensureChatsInitialized();
+      final collectionName = _getChatCollectionName(senderEmail, receiverEmail);
+      _chatCollection = _dbChats!.collection(collectionName);
+      await _chatCollection!.insertOne(message);
+      print('Chat message inserted successfully in $collectionName');
+    } catch (e) {
+      print('Error inserting chat message: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchChatMessages(String senderEmail, String receiverEmail) async {
+    try {
+      _ensureChatsInitialized();
+      final collectionName = _getChatCollectionName(senderEmail, receiverEmail);
+      _chatCollection = _dbChats!.collection(collectionName);
+      final messages = await _chatCollection!
+          .find(mongo.where.sortBy('createdAt', descending: false))
+          .toList();
+      return messages.cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching chat messages: $e');
+      return [];
+    }
+  }
+
+  static String _getChatCollectionName(String senderEmail, String receiverEmail) {
+    final emails = [senderEmail, receiverEmail]..sort();
+    return '${emails[0]}-${emails[1]}';
   }
 }
