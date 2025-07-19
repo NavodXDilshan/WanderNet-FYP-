@@ -4,7 +4,7 @@ import '../models/weather_data.dart';
 
 class WeatherService {
   // Hardcoded API keys (replace with your actual keys)
-  static const String _ambeeApiKey = 'e8b076d174ea56742e0a0057e60f338006a36bbf52c845f1a95db124e2f8102b';
+  static const String _ambeeApiKey = '065971b5c0cb30db9ae6a29e0c86b670797a3aa26f53239780d3d3dcc626ab02';
   static const String _googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
   static const String _ambeeBaseUrl = 'https://api.ambeedata.com/weather';
   static const String _googleBaseUrl = 'https://maps.googleapis.com/maps/api/geocode';

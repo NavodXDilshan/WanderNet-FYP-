@@ -3,12 +3,12 @@ import 'package:flutter_svg/svg.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:google_places_flutter/google_places_flutter.dart';
-import 'package:google_places_flutter/model/prediction.dart';
 import '../dbHelper/mongodb.dart';
 import 'settings.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:geolocator/geolocator.dart';
 
 class Planner extends StatefulWidget {
   const Planner({super.key});
@@ -129,6 +129,7 @@ class PlannerState extends State<Planner> {
           infoWindow: InfoWindow(
             title: placeName,
           ),
+          onTap: () => _showRemoveDialog(placeId, placeName),
         );
       }).whereType<Marker>().toSet();
 
@@ -326,7 +327,7 @@ class PlannerState extends State<Planner> {
       print('Sending payload to backend: ${jsonEncode(payload)}');
 
       final response = await http.post(
-        Uri.parse('http://192.168.1.2:8000/optimize_route'),
+        Uri.parse('http://192.168.1.3:8000/optimize_route'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
@@ -483,78 +484,154 @@ class PlannerState extends State<Planner> {
     print('Route type updated: ${_useRealRoutes ? "Real routes" : "Straight lines"}');
   }
 
-  void _addMarker(Prediction prediction) async {
+  Future<void> _addMarkerFromSearch() async {
+    final city = _searchController.text.trim();
+    if (city.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a place name')),
+      );
+      return;
+    }
+
     try {
-      if (prediction.lat != null && prediction.lng != null) {
-        final lat = double.tryParse(prediction.lat!);
-        final lng = double.tryParse(prediction.lng!);
-        if (lat != null && lng != null) {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?address=$city&key=$googleApiKey',
+      );
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['status'] == 'OK' && json['results'].isNotEmpty) {
+          final location = json['results'][0]['geometry']['location'];
+          final placeName = json['results'][0]['formatted_address'] ?? city;
+          final lat = location['lat'] as double;
+          final lng = location['lng'] as double;
+
           final marker = Marker(
-            markerId: MarkerId(prediction.placeId ?? prediction.description ?? 'search_marker'),
+            markerId: MarkerId(placeName),
             position: LatLng(lat, lng),
             infoWindow: InfoWindow(
-              title: prediction.description ?? 'Unknown Place',
-              onTap: () => _saveToWishlist(prediction),
+              title: placeName,
+              onTap: () => _showRemoveDialog(placeName, placeName),
             ),
+            onTap: () => _showRemoveDialog(placeName, placeName),
           );
-          setState(() {
-            _markers = {..._markers, marker};
-          });
+
+          await _addToWishlistAndMap(placeName, lat, lng, placeName);
+          if (!_markers.any((m) => m.markerId.value == placeName)) {
+            setState(() {
+              _markers.add(marker);
+            });
+          }
           _mapController?.animateCamera(
             CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12.0),
           );
-          print('Marker added: ${prediction.description} at ($lat, $lng)');
+          _searchController.clear();
+          print('Marker added and saved to wishlist: $placeName at ($lat, $lng)');
         } else {
-          print('Invalid coordinates for marker: ${prediction.description}');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid coordinates for selected place')),
+            const SnackBar(content: Text('Place not found. Try a different name (e.g., Colombo, LK).')),
           );
         }
       } else {
-        print('No coordinates for marker: ${prediction.description}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No coordinates available for selected place')),
-        );
+        final error = jsonDecode(response.body)['error_message'] ?? 'Unknown error';
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid Google API key. Verify at console.cloud.google.com.')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to fetch coordinates: ${response.statusCode}, $error')),
+          );
+        }
       }
     } catch (e) {
-      print('Error adding marker: $e');
+      print('Error adding marker from search: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding marker: $e')),
+      );
     }
   }
 
-  Future<void> _saveToWishlist(Prediction prediction) async {
+  Future<void> _addToWishlistAndMap(String name, double lat, double lng, String placeId) async {
     try {
-      if (prediction.lat != null && prediction.lng != null) {
-        final lat = double.tryParse(prediction.lat!);
-        final lng = double.tryParse(prediction.lng!);
-        if (lat != null && lng != null) {
-          await MongoDataBase.insertWishlistItem(userEmail, {
-            'placeName': prediction.description ?? 'Unknown Place',
-            'latitude': lat,
-            'longitude': lng,
-            'placeId': prediction.placeId,
-            'createdAt': DateTime.now().toIso8601String(),
-          });
-          print('Saved to wishlist: ${prediction.description}');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added ${prediction.description} to wishlist')),
-          );
-          _loadWishlistData();
-        } else {
-          print('Invalid coordinates for wishlist: ${prediction.description}');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid coordinates for wishlist')),
-          );
-        }
-      } else {
-        print('No coordinates for wishlist: ${prediction.description}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No coordinates available for wishlist')),
-        );
-      }
+      await MongoDataBase.insertWishlistItem(userEmail, {
+        'placeName': name,
+        'latitude': lat,
+        'longitude': lng,
+        'placeId': placeId,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      print('Saved to wishlist: $name');
+      await _loadWishlistData();
     } catch (e) {
       print('Error saving to wishlist: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add to wishlist: $e')),
+      );
+    }
+  }
+
+  void _showRemoveDialog(String placeId, String placeName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(placeName),
+        content: const Text('Do you want to remove this location from your wishlist?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeWishlistItem(placeId);
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeWishlistItem(String placeId) async {
+    try {
+      await MongoDataBase.removeWishlistItem(userEmail, placeId);
+      print('Removed placeId $placeId from wishlist');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Removed $placeId from wishlist')),
+      );
+      await _loadWishlistData();
+    } catch (e) {
+      print('Error removing wishlist item: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove item: $e')),
+      );
+    }
+  }
+
+  Future<void> _goToCurrentLocation() async {
+    if (_isLocationPermissionGranted && _mapController != null) {
+      try {
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(position.latitude, position.longitude),
+            14.0,
+          ),
+        );
+      } catch (e) {
+        print('Error getting current location: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to get current location')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission not granted')),
       );
     }
   }
@@ -582,7 +659,7 @@ class PlannerState extends State<Planner> {
         nearbyAttractions: nearbyAttractions,
         onAddToWishlist: _addAttractionToWishlist,
         onRecalculate: () {
-          Navigator.pop(context); // Close drawer
+          Navigator.pop(context);
           _calculateRoute();
         },
       ),
@@ -596,7 +673,7 @@ class PlannerState extends State<Planner> {
             ),
             cameraTargetBounds: CameraTargetBounds(_sriLankaBounds),
             myLocationEnabled: _isLocationPermissionGranted,
-            myLocationButtonEnabled: true,
+            myLocationButtonEnabled: false,
             mapType: MapType.normal,
             minMaxZoomPreference: const MinMaxZoomPreference(7.0, 15.0),
             markers: _markers,
@@ -606,11 +683,19 @@ class PlannerState extends State<Planner> {
             top: 16,
             left: 16,
             right: 16,
-            child: GooglePlaceAutoCompleteTextField(
-              textEditingController: _searchController,
-              googleAPIKey: googleApiKey,
-              countries: ['LK'],
-              getPlaceDetailWithLatLng: _addMarker,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search for new places to add to wishlist',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: _addMarkerFromSearch,
+                ),
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onSubmitted: (_) => _addMarkerFromSearch(),
             ),
           ),
           if (!_isLocationPermissionGranted)
@@ -620,6 +705,16 @@ class PlannerState extends State<Planner> {
               child: ElevatedButton(
                 onPressed: _checkAndRequestLocationPermission,
                 child: const Text('Enable Location'),
+              ),
+            ),
+          if (_isLocationPermissionGranted)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child: FloatingActionButton(
+                onPressed: _goToCurrentLocation,
+                backgroundColor: const Color.fromARGB(255, 241, 178, 42),
+                child: const Icon(Icons.my_location),
               ),
             ),
         ],

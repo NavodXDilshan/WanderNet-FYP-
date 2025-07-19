@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/weather_service.dart';
 import '../models/weather_data.dart';
+import '../dbHelper/mongodb.dart';
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -14,14 +15,17 @@ class WeatherScreen extends StatefulWidget {
 class _WeatherScreenState extends State<WeatherScreen> {
   final WeatherService _weatherService = WeatherService();
   WeatherData? _weatherData;
+  List<WeatherData> _wishlistWeatherData = [];
   bool _isLoading = false;
   String _errorMessage = '';
   final TextEditingController _cityController = TextEditingController();
+  final String userEmail = 'k.m.navoddilshan@gmail.com';
 
   @override
   void initState() {
     super.initState();
     _fetchWeatherByLocation();
+    _loadWishlistWeather();
   }
 
   Future<void> _fetchWeatherByLocation() async {
@@ -134,6 +138,34 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
   }
 
+  Future<void> _loadWishlistWeather() async {
+    try {
+      await MongoDataBase.connect();
+      final wishlistItems = await MongoDataBase.fetchWishlistItems(userEmail);
+      final weatherList = <WeatherData>[];
+      for (var item in wishlistItems) {
+        final lat = item['latitude'] as double?;
+        final lng = item['longitude'] as double?;
+        if (lat != null && lng != null) {
+          try {
+            final weather = await _weatherService.getWeatherByLatLng(lat, lng);
+            weatherList.add(weather);
+          } catch (e) {
+            print('Failed to fetch weather for ${item['placeName']}: $e');
+          }
+        }
+      }
+      setState(() {
+        _wishlistWeatherData = weatherList;
+      });
+    } catch (e) {
+      print('Error loading wishlist weather: $e');
+      setState(() {
+        _wishlistWeatherData = [];
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -142,96 +174,129 @@ class _WeatherScreenState extends State<WeatherScreen> {
         centerTitle: true,
         backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _cityController,
-              decoration: InputDecoration(
-                labelText: 'Enter place',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: _fetchWeatherByCity,
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              TextField(
+                controller: _cityController,
+                decoration: InputDecoration(
+                  labelText: 'Enter place',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.search),
+                    onPressed: _fetchWeatherByCity,
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
-                border: const OutlineInputBorder(),
+                onSubmitted: (_) => _fetchWeatherByCity(),
               ),
-              onSubmitted: (_) => _fetchWeatherByCity(),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _fetchWeatherByLocation,
-              child: const Text('Use Current Location'),
-            ),
-            const SizedBox(height: 16),
-            if (_isLoading)
-              const CircularProgressIndicator()
-            else if (_errorMessage.isNotEmpty)
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.red, fontSize: 16),
-                textAlign: TextAlign.center,
-              )
-            else if (_weatherData != null)
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                _weatherData!.cityName,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchWeatherByLocation,
+                child: const Text('Use Current Location'),
+              ),
+              const SizedBox(height: 16),
+              if (_isLoading)
+                const CircularProgressIndicator()
+              else if (_errorMessage.isNotEmpty)
+                Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red, fontSize: 16),
+                  textAlign: TextAlign.center,
+                )
+              else if (_weatherData != null)
+                Column(
+                  children: [
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              _weatherData!.cityName,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _weatherData!.weatherDescription,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey,
-                                ),
-                                textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _weatherData!.weatherDescription,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey,
                               ),
-                            ],
-                          ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildWeatherRow('Temperature', '${_weatherData!.temperature} °C'),
-                              _buildWeatherRow('Humidity', '${_weatherData!.humidity}%'),
-                              _buildWeatherRow('Wind Speed', '${_weatherData!.windSpeed} m/s'),
-                              _buildWeatherRow('Time', _weatherData!.time),
-                              Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: _weatherData!.iconName.isNotEmpty
-                                      ? _getIconFromName(_weatherData!.iconName)
-                                      : const Icon(Icons.help_outline, size: 55.0),
-                                ),
+                    ),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildWeatherRow('Temperature', '${_weatherData!.temperature} °C'),
+                            _buildWeatherRow('Humidity', '${_weatherData!.humidity}%'),
+                            _buildWeatherRow('Wind Speed', '${_weatherData!.windSpeed} m/s'),
+                            _buildWeatherRow('Time', _weatherData!.time),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: _weatherData!.iconName.isNotEmpty
+                                    ? _getIconFromName(_weatherData!.iconName)
+                                    : const Icon(Icons.help_outline, size: 55.0),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'Wishlist Locations Weather',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              ..._wishlistWeatherData.map((weather) => ExpansionTile(
+                    title: Row(
+                      children: [
+                        weather.iconName.isNotEmpty
+                            ? _getIconFromName(weather.iconName)
+                            : const Icon(Icons.help_outline, size: 40.0),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${weather.temperature} °C',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ],
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildWeatherRow('City', weather.cityName),
+                            _buildWeatherRow('Description', weather.weatherDescription),
+                            _buildWeatherRow('Temperature', '${weather.temperature} °C'),
+                            _buildWeatherRow('Humidity', '${weather.humidity}%'),
+                            _buildWeatherRow('Wind Speed', '${weather.windSpeed} m/s'),
+                            _buildWeatherRow('Time', weather.time),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-          ],
+                  )),
+            ],
+          ),
         ),
       ),
     );

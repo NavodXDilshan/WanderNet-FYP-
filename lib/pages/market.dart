@@ -92,13 +92,18 @@ class Market extends StatefulWidget {
 class _MarketState extends State<Market> {
   List<MarketCategory> categories = MarketCategory.getCategories();
   List<MarketItemModel> items = [];
+  List<MarketItemModel> filteredItems = [];
   String selectedCategory = 'All';
+  String searchQuery = '';
   bool isLoading = false;
+  final TextEditingController _searchController = TextEditingController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _loadItems();
+    _searchController.addListener(_onSearchChanged);
   }
 
   Future<void> _loadItems() async {
@@ -110,14 +115,13 @@ class _MarketState extends State<Market> {
       final posts = await MongoDataBase.fetchMarketItems();
       setState(() {
         items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
-        if (selectedCategory != 'All') {
-          items = items.where((item) => item.category == selectedCategory).toList();
-        }
+        _filterItems();
       });
     } catch (e) {
       print('Error loading market items: $e');
       setState(() {
         items = [];
+        filteredItems = [];
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load items: $e')),
@@ -129,11 +133,27 @@ class _MarketState extends State<Market> {
     }
   }
 
+  void _onSearchChanged() {
+    setState(() {
+      searchQuery = _searchController.text.trim();
+      _filterItems();
+    });
+  }
+
+  void _filterItems() {
+    filteredItems = items.where((item) {
+      final matchesCategory = selectedCategory == 'All' || item.category == selectedCategory;
+      final matchesSearch = searchQuery.isEmpty ||
+          item.name.toLowerCase().contains(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    }).toList();
+  }
+
   void _onCategorySelected(String categoryName) {
     setState(() {
       selectedCategory = categoryName;
+      _filterItems();
     });
-    _loadItems();
   }
 
   void _showAddItemDialog() {
@@ -148,8 +168,10 @@ class _MarketState extends State<Market> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: _appBar(),
       backgroundColor: Colors.white,
+      drawer: _buildDrawer(),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,7 +181,7 @@ class _MarketState extends State<Market> {
             _categoriesSection(),
             isLoading
                 ? _loadingIndicator()
-                : items.isEmpty
+                : filteredItems.isEmpty
                     ? const Center(child: Text('No items found.'))
                     : _itemsGrid(),
           ],
@@ -198,13 +220,12 @@ class _MarketState extends State<Market> {
         ),
       ),
       actions: [
-        GestureDetector(
-          onTap: () {},
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            alignment: Alignment.center,
-            width: 30,
-            child: SvgPicture.asset('assets/icons/dots.svg'),
+        IconButton(
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          icon: SvgPicture.asset(
+            'assets/icons/dots.svg',
+            width: 24,
+            height: 24,
           ),
         ),
       ],
@@ -224,6 +245,7 @@ class _MarketState extends State<Market> {
         ],
       ),
       child: TextField(
+        controller: _searchController,
         decoration: InputDecoration(
           filled: true,
           fillColor: Colors.white,
@@ -234,31 +256,35 @@ class _MarketState extends State<Market> {
             padding: const EdgeInsets.all(12),
             child: SvgPicture.asset('assets/icons/Search.svg'),
           ),
-          suffixIcon: Container(
-            width: 100,
-            child: IntrinsicHeight(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const VerticalDivider(
-                    color: Colors.black,
-                    indent: 10,
-                    endIndent: 10,
-                    thickness: 0.1,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: SvgPicture.asset('assets/icons/Filter.svg'),
-                  ),
-                ],
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_searchController.text.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    _searchController.clear();
+                    _onSearchChanged();
+                  },
+                ),
+              const VerticalDivider(
+                color: Colors.black,
+                indent: 10,
+                endIndent: 10,
+                thickness: 0.1,
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: SvgPicture.asset('assets/icons/Filter.svg'),
+              ),
+            ],
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(15),
             borderSide: BorderSide.none,
           ),
         ),
+        onChanged: (value) => _onSearchChanged(),
       ),
     );
   }
@@ -346,9 +372,9 @@ class _MarketState extends State<Market> {
         mainAxisSpacing: 10,
         childAspectRatio: 0.75,
       ),
-      itemCount: items.length,
+      itemCount: filteredItems.length,
       itemBuilder: (context, index) {
-        final item = items[index];
+        final item = filteredItems[index];
         return Card(
           elevation: 2,
           child: InkWell(
@@ -445,6 +471,119 @@ class _MarketState extends State<Market> {
         );
       },
     );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 240, 144, 9),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Ongoing Chats',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _fetchConversations(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No ongoing chats.'));
+                }
+                final conversations = snapshot.data!;
+                return ListView.builder(
+                  itemCount: conversations.length,
+                  itemBuilder: (context, index) {
+                    final conversation = conversations[index];
+                    final sellerEmail = conversation['sellerEmail'];
+                    final itemName = conversation['itemName'];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.grey[300],
+                        child: Text(
+                          sellerEmail[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                      ),
+                      title: Text(
+                        sellerEmail,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text('Item: $itemName'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatWithSeller(
+                              sellerEmail: sellerEmail,
+                              itemName: itemName,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchConversations() async {
+    try {
+      await MongoDataBase.connectToChats();
+      final currentUserEmail = 'k.m.navoddilshan@gmail.com';
+      final sellerEmail = "";
+      final messages = await MongoDataBase.fetchChatMessages(currentUserEmail,sellerEmail);
+      final conversations = <Map<String, dynamic>>[];
+      final seenConversations = <String>{};
+
+      for (var message in messages) {
+        final sender = message['sender'] as String;
+        final receiver = message['receiver'] as String;
+        final otherUser = sender == currentUserEmail ? receiver : sender;
+        final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
+        final conversationKey = '$otherUser-$itemName';
+
+        if (!seenConversations.contains(conversationKey)) {
+          conversations.add({
+            'sellerEmail': otherUser,
+            'itemName': itemName,
+          });
+          seenConversations.add(conversationKey);
+        }
+      }
+      return conversations;
+    } catch (e) {
+      print('Error fetching conversations: $e');
+      throw Exception('Failed to fetch conversations: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 }
 
@@ -928,6 +1067,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
   void initState() {
     super.initState();
     _initializeChat();
+    _startPolling();
   }
 
   Future<void> _initializeChat() async {
@@ -1000,6 +1140,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
         {
           'text': _messageController.text.trim(),
           'sender': currentUserEmail,
+          'receiver': widget.sellerEmail,
           'createdAt': DateTime.now().toIso8601String(),
         },
       );
@@ -1102,6 +1243,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
                       ),
           ),
           Container(
+            margin: const EdgeInsets.fromLTRB(0, 0, 0, 15),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,

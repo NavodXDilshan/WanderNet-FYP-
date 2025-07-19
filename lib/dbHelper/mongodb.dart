@@ -306,4 +306,10 @@ class MongoDataBase {
     final emails = [senderEmail, receiverEmail]..sort();
     return '${emails[0]}-${emails[1]}';
   }
+
+  // New getter to access _dbChats
+  static mongo.Db get chatDb {
+    _ensureChatsInitialized();
+    return _dbChats!;
+  }
 }
