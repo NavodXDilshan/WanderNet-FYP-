@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app/models/post_model.dart';
 import 'package:app/dbHelper/mongodb.dart';
+import 'package:app/components/photo_gallery.dart';
 
 class PostCard extends StatelessWidget {
   final PostModel post;
@@ -323,26 +324,12 @@ class PostCard extends StatelessWidget {
                     // Image Section
                     if (post.imagePath != null) ...[
                       const SizedBox(height: 16),
-                      Container(
+                      PhotoGallery(
+                        imagePath: post.imagePath,
+                        isNetworkImage: true,
+                        borderRadius: 16,
                         margin: const EdgeInsets.symmetric(horizontal: 20),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.shade300,
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            post.imagePath!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                        fit: BoxFit.cover,
                       ),
                     ],
 
@@ -586,9 +573,18 @@ class PostCard extends StatelessWidget {
                                           'Navod Dilshan',
                                           commentText,
                                         );
+                                        // Update the local post data
+                                        post.commentsList.add({
+                                            'userId': currentUserId,
+                                            'userName': 'Navod Dilshan',
+                                            'content': commentText,
+                                            'createdAt': DateTime.now().toIso8601String(),
+                                        });
+                                        post.comments++;
                                         commentController.clear();
                                         setCardState(() {
                                           showCommentInput = false;
+                                          showComments = true;
                                         });
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(context).showSnackBar(

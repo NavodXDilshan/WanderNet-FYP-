@@ -6,7 +6,7 @@ class PostModel {
   final String content;
   final String? imagePath;
   final int likes;
-  final int comments;
+  int comments;
   final int shares;
   final String? location;
   final double? latitude;

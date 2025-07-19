@@ -74,6 +74,7 @@ class _FeedState extends State<Feed> {
         onRefresh: () async {
           setState(() {}); // Rebuild FutureBuilder
         },
+        //TODO: Implement a reconnect mechanism for MongoDB master connection
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: MongoDataBase.fetchPosts(),
           builder: (context, snapshot) {
