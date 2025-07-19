@@ -4,6 +4,7 @@ import 'package:app/models/post_model.dart';
 import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
+import 'package:app/pages/create_post.dart';
 
 
 class Feed extends StatefulWidget {
@@ -27,45 +28,14 @@ class _FeedState extends State<Feed> {
       endDrawer: drawerBar(context),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          final controller = TextEditingController();
-          final result = await showDialog<String>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text("New Post"),
-              content: TextField(
-                controller: controller,
-                decoration: const InputDecoration(hintText: "What's on your mind?"),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, controller.text),
-                  child: const Text("Post"),
-                ),
-              ],
-            ),
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreatePostPage()),
           );
-          if (result != null && result.isNotEmpty) {
-            await MongoDataBase.insertPost({
-              'userName': 'Navod Dilshan',
-              'userAvatar': 'assets/images/user1.png',
-              'timeAgo': 'Just now',
-              'content': result,
-              'imagePath': null,
-              'likes': 0,
-              'comments': 0,
-              'shares': 0,
-              'likedBy': [],
-              'createdAt': DateTime.now().toIso8601String(),
-              'commentsList': [],
-            });
-            setState(() {}); // Refresh posts
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Post created successfully")),
-            );
+          
+          // Only refresh if post was successfully created
+          if (result == true) {
+            setState(() {}); // Refresh feed
           }
         },
         child: const Icon(Icons.add),
