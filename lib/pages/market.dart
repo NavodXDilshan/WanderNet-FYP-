@@ -8,6 +8,39 @@ import 'package:google_places_flutter/google_places_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class AuthService {
+  static final SupabaseClient supabase = Supabase.instance.client;
+
+  static Future<Map<String, String?>> getUserInfo() async {
+    final user = supabase.auth.currentUser;
+    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
+    if (user == null) {
+      print('No authenticated user found');
+      return {'userEmail': null, 'username': null, 'userId': null};
+    }
+    try {
+      final response = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('user_id', user.id)
+          .single();
+      return {
+        'userEmail': user.email,
+        'username': response['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    } catch (e) {
+      print('Error fetching username from profiles: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    }
+  }
+}
 
 class MarketItemModel {
   final String? id;
@@ -17,6 +50,7 @@ class MarketItemModel {
   final String? description;
   final String username;
   final String userEmail;
+  final String userId;
   final String category;
   final LatLng? location;
 
@@ -28,6 +62,7 @@ class MarketItemModel {
     this.description,
     required this.username,
     required this.userEmail,
+    required this.userId,
     required this.category,
     this.location,
   });
@@ -39,8 +74,9 @@ class MarketItemModel {
       price: map['price'] ?? '',
       imageUrl: map['imageUrl'],
       description: map['description'],
-      username: map['username'] ?? '',
+      username: map['username'] ?? 'Guest',
       userEmail: map['userEmail'] ?? '',
+      userId: map['userId'] ?? '',
       category: map['category'] ?? 'All',
       location: map['location'] != null
           ? LatLng(map['location']['latitude'] ?? 0.0, map['location']['longitude'] ?? 0.0)
@@ -56,6 +92,7 @@ class MarketItemModel {
       'description': description,
       'username': username,
       'userEmail': userEmail,
+      'userId': userId,
       'category': category,
       'location': location != null
           ? {'latitude': location!.latitude, 'longitude': location!.longitude}
@@ -95,41 +132,54 @@ class _MarketState extends State<Market> {
   String selectedCategory = 'All';
   String searchQuery = '';
   bool isLoading = false;
+  String? userEmail;
+  String? username;
+  String? userId;
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
+    _loadUserInfo();
     _loadItems();
     _searchController.addListener(_onSearchChanged);
   }
 
-Future<void> _loadItems() async {
-  setState(() {
-    isLoading = true;
-  });
-  try {
-    final posts = await MongoDataBase.fetchMarketItems();
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
     setState(() {
-      items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
-      _filterItems();
-    });
-  } catch (e) {
-    print('Error loading market items: $e');
-    setState(() {
-      items = [];
-      filteredItems = [];
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Failed to load items: $e')),
-    );
-  } finally {
-    setState(() {
-      isLoading = false;
+      userEmail = userInfo['userEmail'];
+      username = userInfo['username'];
+      userId = userInfo['userId'];
     });
   }
-}
+
+  Future<void> _loadItems() async {
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      final posts = await MongoDataBase.fetchMarketItems();
+      setState(() {
+        items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
+        _filterItems();
+      });
+    } catch (e) {
+      print('Error loading market items: $e');
+      setState(() {
+        items = [];
+        filteredItems = [];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load items: $e')),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
 
   void _onSearchChanged() {
     setState(() {
@@ -155,10 +205,17 @@ Future<void> _loadItems() async {
   }
 
   void _showAddItemDialog() {
+    if (userEmail == null || userId == null || username == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => LocationPickerDialog(
         onItemAdded: _loadItems,
+        userEmail: userEmail!,
+        username: username!,
+        userId: userId!,
       ),
     );
   }
@@ -195,9 +252,9 @@ Future<void> _loadItems() async {
 
   AppBar _appBar() {
     return AppBar(
-      title: const Text(
-        'Marketplace',
-        style: TextStyle(color: Colors.black, fontSize: 20),
+      title: Text(
+        'Marketplace - ${username ?? 'Guest'}',
+        style: const TextStyle(color: Colors.black, fontSize: 20),
       ),
       centerTitle: true,
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
@@ -388,6 +445,7 @@ Future<void> _loadItems() async {
                     description: item.description,
                     username: item.username,
                     userEmail: item.userEmail,
+                    userId: item.userId,
                     category: item.category,
                     location: item.location,
                   ),
@@ -483,8 +541,8 @@ Future<void> _loadItems() async {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Ongoing Chats',
-                style: TextStyle(
+                'Ongoing Chats - ${username ?? 'Guest'}',
+                style: const TextStyle(
                   color: Colors.black,
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
@@ -527,12 +585,19 @@ Future<void> _loadItems() async {
                       ),
                       subtitle: Text('Item: $itemName'),
                       onTap: () {
+                        if (userEmail == null || userId == null || username == null) {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+                          return;
+                        }
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => ChatWithSeller(
                               sellerEmail: sellerEmail,
                               itemName: itemName,
+                              currentUserEmail: userEmail!,
+                              currentUsername: username!,
+                              currentUserId: userId!,
                             ),
                           ),
                         );
@@ -549,18 +614,19 @@ Future<void> _loadItems() async {
   }
 
   Future<List<Map<String, dynamic>>> _fetchConversations() async {
+    if (userEmail == null) {
+      return [];
+    }
     try {
       await MongoDataBase.connectToChats();
-      final currentUserEmail = 'k.m.navoddilshan@gmail.com';
-      final sellerEmail = "";
-      final messages = await MongoDataBase.fetchChatMessages(currentUserEmail, sellerEmail);
+      final messages = await MongoDataBase.fetchChatMessages(userEmail!, '');
       final conversations = <Map<String, dynamic>>[];
       final seenConversations = <String>{};
 
       for (var message in messages) {
         final sender = message['sender'] as String;
         final receiver = message['receiver'] as String;
-        final otherUser = sender == currentUserEmail ? receiver : sender;
+        final otherUser = sender == userEmail ? receiver : sender;
         final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
         final conversationKey = '$otherUser-$itemName';
 
@@ -588,8 +654,17 @@ Future<void> _loadItems() async {
 
 class LocationPickerDialog extends StatefulWidget {
   final VoidCallback onItemAdded;
+  final String userEmail;
+  final String username;
+  final String userId;
 
-  const LocationPickerDialog({Key? key, required this.onItemAdded}) : super(key: key);
+  const LocationPickerDialog({
+    Key? key,
+    required this.onItemAdded,
+    required this.userEmail,
+    required this.username,
+    required this.userId,
+  }) : super(key: key);
 
   @override
   State<LocationPickerDialog> createState() => _LocationPickerDialogState();
@@ -782,32 +857,45 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-  TextButton(
-    onPressed: () async {
-      if (_nameController.text.isNotEmpty && _priceController.text.isNotEmpty) {
-        final newItem = MarketItemModel(
-          name: _nameController.text,
-          price: _priceController.text,
-          imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
-          description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
-          username: 'Navod',
-          userEmail: 'k.m.navoddilshan@gmail.com',
-          category: selectedCategory,
-          location: _selectedLocation,
-        );
-        try {
-          await MongoDataBase.insertMarketItem(newItem.toMap());
-          Navigator.pop(context);
-          widget.onItemAdded();
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error adding item: $e')),
-          );
-        }
-      }
-    },
-    child: const Text('Add'),
-    )
+        TextButton(
+          onPressed: () async {
+            if (_nameController.text.isEmpty || _priceController.text.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Item name and price are required')),
+              );
+              return;
+            }
+            if (widget.username == 'Guest') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please sign in with a valid username')),
+              );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+              return;
+            }
+            print('Adding item with username: ${widget.username}');
+            final newItem = MarketItemModel(
+              name: _nameController.text,
+              price: _priceController.text,
+              imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
+              description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+              username: widget.username,
+              userEmail: widget.userEmail,
+              userId: widget.userId,
+              category: selectedCategory,
+              location: _selectedLocation,
+            );
+            try {
+              await MongoDataBase.insertMarketItem(newItem.toMap());
+              Navigator.pop(context);
+              widget.onItemAdded();
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error adding item: $e')),
+              );
+            }
+          },
+          child: const Text('Add'),
+        ),
       ],
     );
   }
@@ -832,6 +920,7 @@ class MarketItemDetailPage extends StatelessWidget {
   final String? description;
   final String username;
   final String userEmail;
+  final String userId;
   final String category;
   final LatLng? location;
 
@@ -844,6 +933,7 @@ class MarketItemDetailPage extends StatelessWidget {
     this.description,
     required this.username,
     required this.userEmail,
+    required this.userId,
     required this.category,
     this.location,
   }) : super(key: key);
@@ -857,8 +947,15 @@ class MarketItemDetailPage extends StatelessWidget {
       'Other',
     ];
 
-    void showReportDialog() {
+    void showReportDialog() async {
       String? selectedReason;
+      final userInfo = await AuthService.getUserInfo();
+      final reporterEmail = userInfo['userEmail'];
+      final reporterId = userInfo['userId'];
+      if (reporterEmail == null || reporterId == null) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+        return;
+      }
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -892,7 +989,9 @@ class MarketItemDetailPage extends StatelessWidget {
                       'itemId': itemId,
                       'itemName': name,
                       'sellerEmail': userEmail,
-                      'reporterEmail': 'k.m.navoddilshan@gmail.com',
+                      'sellerId': userId,
+                      'reporterEmail': reporterEmail,
+                      'reporterId': reporterId,
                       'reason': selectedReason,
                       'createdAt': DateTime.now().toIso8601String(),
                     });
@@ -997,13 +1096,24 @@ class MarketItemDetailPage extends StatelessWidget {
                         ),
                       ),
                       ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          final userInfo = await AuthService.getUserInfo();
+                          final currentUserEmail = userInfo['userEmail'];
+                          final currentUsername = userInfo['username'];
+                          final currentUserId = userInfo['userId'];
+                          if (currentUserEmail == null || currentUserId == null || currentUsername == null) {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+                            return;
+                          }
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatWithSeller(
                                 sellerEmail: userEmail,
                                 itemName: name,
+                                currentUserEmail: currentUserEmail,
+                                currentUsername: currentUsername,
+                                currentUserId: currentUserId,
                               ),
                             ),
                           );
@@ -1124,11 +1234,17 @@ class MarketItemDetailPage extends StatelessWidget {
 class ChatWithSeller extends StatefulWidget {
   final String sellerEmail;
   final String itemName;
+  final String currentUserEmail;
+  final String currentUsername;
+  final String currentUserId;
 
   const ChatWithSeller({
     Key? key,
     required this.sellerEmail,
     required this.itemName,
+    required this.currentUserEmail,
+    required this.currentUsername,
+    required this.currentUserId,
   }) : super(key: key);
 
   @override
@@ -1136,7 +1252,6 @@ class ChatWithSeller extends StatefulWidget {
 }
 
 class _ChatWithSellerState extends State<ChatWithSeller> {
-  final String currentUserEmail = 'k.m.navoddilshan@gmail.com';
   final TextEditingController _messageController = TextEditingController();
   List<Map<String, dynamic>> messages = [];
   bool isLoading = true;
@@ -1172,7 +1287,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
   Future<void> _loadMessages() async {
     try {
       final fetchedMessages = await MongoDataBase.fetchChatMessages(
-        currentUserEmail,
+        widget.currentUserEmail,
         widget.sellerEmail,
       );
       setState(() {
@@ -1209,28 +1324,29 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
     }
   }
 
-Future<void> _sendMessage() async {
-  if (_messageController.text.trim().isEmpty) return;
-  try {
-    await MongoDataBase.insertChatMessage(
-      currentUserEmail,
-      widget.sellerEmail,
-      {
-        'text': _messageController.text.trim(),
-        'sender': currentUserEmail,
-        'receiver': widget.sellerEmail,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    );
-    _messageController.clear();
-    await _loadMessages();
-  } catch (e) {
-    print('Error sending message: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Failed to send message: $e')),
-    );
+  Future<void> _sendMessage() async {
+    if (_messageController.text.trim().isEmpty) return;
+    try {
+      await MongoDataBase.insertChatMessage(
+        widget.currentUserEmail,
+        widget.sellerEmail,
+        {
+          'text': _messageController.text.trim(),
+          'sender': widget.currentUserEmail,
+          'senderName': widget.currentUsername,
+          'receiver': widget.sellerEmail,
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+      _messageController.clear();
+      await _loadMessages();
+    } catch (e) {
+      print('Error sending message: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send message: $e')),
+      );
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -1281,7 +1397,7 @@ Future<void> _sendMessage() async {
                         itemCount: messages.length,
                         itemBuilder: (context, index) {
                           final message = messages[index];
-                          final isCurrentUser = message['sender'] == currentUserEmail;
+                          final isCurrentUser = message['sender'] == widget.currentUserEmail;
                           return Align(
                             alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
                             child: Container(
@@ -1296,6 +1412,15 @@ Future<void> _sendMessage() async {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  Text(
+                                    message['senderName'] ?? (isCurrentUser ? widget.currentUsername : 'Seller'),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: isCurrentUser ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
                                   Text(
                                     message['text'] ?? '',
                                     style: TextStyle(
@@ -1369,5 +1494,17 @@ Future<void> _sendMessage() async {
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+}
+
+class SignInPage extends StatelessWidget {
+  const SignInPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: const Center(child: Text('Sign In Page')),
+    );
   }
 }
