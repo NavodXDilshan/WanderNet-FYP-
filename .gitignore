@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+<<<<<<< HEAD
 # backend related
+=======
+# Backend related
+>>>>>>> feed
 /lib/backend/node_modules/
 /lib/backend/.env
