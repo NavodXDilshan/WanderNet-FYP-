@@ -9,6 +9,7 @@ import 'package:google_places_flutter/google_places_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
+import 'package:app/pages/chatbot.dart'; // Adjust the path based on your project structure
 
 class MarketItemModel {
   final String? id;
@@ -165,11 +166,31 @@ class _MarketState extends State<Market> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddItemDialog,
-        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: Column(
+  mainAxisAlignment: MainAxisAlignment.end,
+  children: [
+    FloatingActionButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ChatbotPage(),
+          ),
+        );
+      },
+      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+      heroTag: 'chatbot',
+      child: const Icon(Icons.chat_bubble),
+    ),
+    const SizedBox(height: 10),
+    FloatingActionButton(
+      onPressed: _showAddItemDialog,
+      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+      heroTag: 'addItem',
+      child: const Icon(Icons.add),
+    ),
+  ],
+),
     );
   }
 
