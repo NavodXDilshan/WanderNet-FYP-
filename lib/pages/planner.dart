@@ -9,6 +9,39 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class AuthService {
+  static final SupabaseClient supabase = Supabase.instance.client;
+
+  static Future<Map<String, String?>> getUserInfo() async {
+    final user = supabase.auth.currentUser;
+    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
+    if (user == null) {
+      print('No authenticated user found');
+      return {'userEmail': null, 'username': null, 'userId': null};
+    }
+    try {
+      final response = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('user_id', user.id)
+          .single();
+      return {
+        'userEmail': user.email,
+        'username': response['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    } catch (e) {
+      print('Error fetching username from profiles: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    }
+  }
+}
 
 class Planner extends StatefulWidget {
   const Planner({super.key});
@@ -29,7 +62,9 @@ class PlannerState extends State<Planner> {
   Set<Polyline> _polylines = {};
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _timeConstraintController = TextEditingController();
-  final String userEmail = 'k.m.navoddilshan@gmail.com';
+  String? userEmail;
+  String? username;
+  String? userId;
   String? selectedOption = 'Max Node';
   String? selectedStartPlaceId;
   String? selectedTargetPlaceId;
@@ -48,8 +83,20 @@ class PlannerState extends State<Planner> {
   @override
   void initState() {
     super.initState();
+    _loadUserInfo();
     _checkAndRequestLocationPermission();
-    _loadWishlistData();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      userEmail = userInfo['userEmail'];
+      username = userInfo['username'];
+      userId = userInfo['userId'];
+    });
+    if (userEmail != null) {
+      await _loadWishlistData();
+    }
   }
 
   Future<void> _checkAndRequestLocationPermission() async {
@@ -100,9 +147,13 @@ class PlannerState extends State<Planner> {
   }
 
   Future<void> _loadWishlistData() async {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     try {
-      final items = await MongoDataBase.fetchWishlistItems(userEmail);
-      print('Loaded wishlist items: ${items.length}');
+      final items = await MongoDataBase.fetchWishlistItems(userEmail!);
+      print('Loaded wishlist items for $userEmail: ${items.length}');
       final seenPlaceIds = <String>{};
       final uniqueItems = items.where((item) {
         final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
@@ -353,7 +404,6 @@ class PlannerState extends State<Planner> {
           return LatLng(item['latitude'] as double, item['longitude'] as double);
         }).toList();
 
-        // Fetch nearby attractions for the route
         await _fetchNearbyAttractions(waypoints);
 
         List<LatLng> polylinePoints;
@@ -418,7 +468,11 @@ class PlannerState extends State<Planner> {
   }
 
   Future<void> _addAttractionToWishlist(Map<String, dynamic> attraction) async {
-    try {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
+ Tarihi: try {
       final lat = attraction['latitude'] as double?;
       final lng = attraction['longitude'] as double?;
       if (lat == null || lng == null) {
@@ -429,7 +483,7 @@ class PlannerState extends State<Planner> {
         return;
       }
 
-      await MongoDataBase.insertWishlistItem(userEmail, {
+      await MongoDataBase.insertWishlistItem(userEmail!, {
         'placeName': attraction['name'] as String? ?? 'Unknown Attraction',
         'latitude': lat,
         'longitude': lng,
@@ -438,7 +492,7 @@ class PlannerState extends State<Planner> {
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      print('Added attraction to wishlist: ${attraction['name']}');
+      print('Added attraction to wishlist: ${attraction['name']} for $userEmail');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Added ${attraction['name']} to wishlist')),
       );
@@ -485,6 +539,10 @@ class PlannerState extends State<Planner> {
   }
 
   Future<void> _addMarkerFromSearch() async {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     final city = _searchController.text.trim();
     if (city.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -527,7 +585,7 @@ class PlannerState extends State<Planner> {
             CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12.0),
           );
           _searchController.clear();
-          print('Marker added and saved to wishlist: $placeName at ($lat, $lng)');
+          print('Marker added and saved to wishlist: $placeName at ($lat, $lng) for $userEmail');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Place not found. Try a different name (e.g., Colombo, LK).')),
@@ -554,15 +612,19 @@ class PlannerState extends State<Planner> {
   }
 
   Future<void> _addToWishlistAndMap(String name, double lat, double lng, String placeId) async {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     try {
-      await MongoDataBase.insertWishlistItem(userEmail, {
+      await MongoDataBase.insertWishlistItem(userEmail!, {
         'placeName': name,
         'latitude': lat,
         'longitude': lng,
         'placeId': placeId,
         'createdAt': DateTime.now().toIso8601String(),
       });
-      print('Saved to wishlist: $name');
+      print('Saved to wishlist: $name for $userEmail');
       await _loadWishlistData();
     } catch (e) {
       print('Error saving to wishlist: $e');
@@ -596,9 +658,13 @@ class PlannerState extends State<Planner> {
   }
 
   Future<void> _removeWishlistItem(String placeId) async {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     try {
-      await MongoDataBase.removeWishlistItem(userEmail, placeId);
-      print('Removed placeId $placeId from wishlist');
+      await MongoDataBase.removeWishlistItem(userEmail!, placeId);
+      print('Removed placeId $placeId from wishlist for $userEmail');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Removed $placeId from wishlist')),
       );
@@ -717,6 +783,15 @@ class PlannerState extends State<Planner> {
                 child: const Icon(Icons.my_location),
               ),
             ),
+          if (userEmail == null)
+            Positioned(
+              bottom: 80,
+              left: 16,
+              child: ElevatedButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage())),
+                child: const Text('Sign in to manage wishlist'),
+              ),
+            ),
         ],
       ),
     );
@@ -724,9 +799,9 @@ class PlannerState extends State<Planner> {
 
   AppBar appBar() {
     return AppBar(
-      title: const Text(
-        'Plan Your Tour',
-        style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+      title: Text(
+        'Plan Your Tour - ${username ?? 'Guest'}',
+        style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
       ),
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       centerTitle: true,
@@ -842,6 +917,7 @@ class DrawerBar extends StatelessWidget {
             title: const Text('Logout'),
             onTap: () {
               Navigator.pop(context);
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignInPage()));
             },
           ),
           ListTile(
@@ -952,12 +1028,12 @@ class NearbyAttractionsDrawer extends StatelessWidget {
   final Function(Map<String, dynamic>) onAddToWishlist;
   final VoidCallback onRecalculate;
 
-  const NearbyAttractionsDrawer({
-    super.key,
-    required this.nearbyAttractions,
-    required this.onAddToWishlist,
-    required this.onRecalculate,
-  });
+const NearbyAttractionsDrawer({
+  super.key,
+  required this.nearbyAttractions,
+  required this.onAddToWishlist,
+  required this.onRecalculate,
+});
 
   @override
   Widget build(BuildContext context) {
@@ -1012,6 +1088,18 @@ class NearbyAttractionsDrawer extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class SignInPage extends StatelessWidget {
+  const SignInPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: const Center(child: Text('Sign In Page')),
     );
   }
 }

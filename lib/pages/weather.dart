@@ -4,6 +4,39 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/weather_service.dart';
 import '../models/weather_data.dart';
 import '../dbHelper/mongodb.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class AuthService {
+  static final SupabaseClient supabase = Supabase.instance.client;
+
+  static Future<Map<String, String?>> getUserInfo() async {
+    final user = supabase.auth.currentUser;
+    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
+    if (user == null) {
+      print('No authenticated user found');
+      return {'userEmail': null, 'username': null, 'userId': null};
+    }
+    try {
+      final response = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('user_id', user.id)
+          .single();
+      return {
+        'userEmail': user.email,
+        'username': response['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    } catch (e) {
+      print('Error fetching username from profiles: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? 'Guest',
+        'userId': user.id
+      };
+    }
+  }
+}
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -19,13 +52,27 @@ class _WeatherScreenState extends State<WeatherScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
   final TextEditingController _cityController = TextEditingController();
-  final String userEmail = 'k.m.navoddilshan@gmail.com';
+  String? userEmail;
+  String? username;
+  String? userId;
 
   @override
   void initState() {
     super.initState();
+    _loadUserInfo();
     _fetchWeatherByLocation();
-    _loadWishlistWeather();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      userEmail = userInfo['userEmail'];
+      username = userInfo['username'];
+      userId = userInfo['userId'];
+    });
+    if (userEmail != null) {
+      await _loadWishlistWeather();
+    }
   }
 
   Future<void> _fetchWeatherByLocation() async {
@@ -139,9 +186,14 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 
   Future<void> _loadWishlistWeather() async {
+    if (userEmail == null || userId == null) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+      return;
+    }
     try {
       await MongoDataBase.connect();
-      final wishlistItems = await MongoDataBase.fetchWishlistItems(userEmail);
+      final wishlistItems = await MongoDataBase.fetchWishlistItems(userEmail!);
+      print('Wishlist items for $userEmail: $wishlistItems');
       final weatherList = <Map<String, dynamic>>[];
       for (var item in wishlistItems) {
         final lat = item['latitude'] as double?;
@@ -167,6 +219,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
       setState(() {
         _wishlistWeatherData = [];
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load wishlist: $e')),
+      );
     }
   }
 
@@ -174,7 +229,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Weather Tracker'),
+        title: Text(
+          'Weather Tracker - ${username ?? 'Guest'}',
+          style: const TextStyle(color: Colors.black, fontSize: 20),
+        ),
         centerTitle: true,
         backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       ),
@@ -273,44 +331,54 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              ..._wishlistWeatherData.map((entry) => Card(
-                    margin: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: ExpansionTile(
-                      title: Center(
-                        child: Text(
-                          entry['placeName'],
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+              if (_wishlistWeatherData.isEmpty && userEmail != null)
+                const Center(child: Text('No wishlist items found.'))
+              else if (_wishlistWeatherData.isEmpty && userEmail == null)
+                Center(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage())),
+                    child: const Text('Sign in to view wishlist'),
+                  ),
+                )
+              else
+                ..._wishlistWeatherData.map((entry) => Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: ExpansionTile(
+                        title: Center(
+                          child: Text(
+                            entry['placeName'],
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
+                        leading: entry['weather'].iconName.isNotEmpty
+                            ? _getIconFromName(entry['weather'].iconName)
+                            : const Icon(Icons.help_outline, size: 40.0),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Center(
+                                  child: entry['weather'].iconName.isNotEmpty
+                                      ? _getIconFromName(entry['weather'].iconName)
+                                      : const Icon(Icons.help_outline, size: 40.0),
+                                ),
+                                const Divider(height: 20),
+                                _buildWeatherRow('', entry['weather'].weatherDescription),
+                                _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
+                                _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
+                                _buildWeatherRow('Wind Speed', '${entry['weather'].windSpeed} m/s'),
+                                _buildWeatherRow('Time', entry['weather'].time),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      leading: entry['weather'].iconName.isNotEmpty
-                          ? _getIconFromName(entry['weather'].iconName)
-                          : const Icon(Icons.help_outline, size: 40.0),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Center(
-                                child: entry['weather'].iconName.isNotEmpty
-                                    ? _getIconFromName(entry['weather'].iconName)
-                                    : const Icon(Icons.help_outline, size: 40.0),
-                              ),
-                              const Divider(height: 20),
-                              _buildWeatherRow('', entry['weather'].weatherDescription),
-                              _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
-                              _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
-                              _buildWeatherRow('Wind Speed', '${entry['weather'].windSpeed} m/s'),
-                              _buildWeatherRow('Time', entry['weather'].time),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                    )),
             ],
           ),
         ),
@@ -334,7 +402,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           label.isEmpty
               ? ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width - 64.0, // Account for 16.0 padding on both sides
+                    maxWidth: MediaQuery.of(context).size.width - 64.0,
                   ),
                   child: Text(
                     value,
@@ -383,5 +451,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
   void dispose() {
     _cityController.dispose();
     super.dispose();
+  }
+}
+
+class SignInPage extends StatelessWidget {
+  const SignInPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: const Center(child: Text('Sign In Page')),
+    );
   }
 }
