@@ -15,7 +15,7 @@ class WeatherScreen extends StatefulWidget {
 class _WeatherScreenState extends State<WeatherScreen> {
   final WeatherService _weatherService = WeatherService();
   WeatherData? _weatherData;
-  List<WeatherData> _wishlistWeatherData = [];
+  List<Map<String, dynamic>> _wishlistWeatherData = [];
   bool _isLoading = false;
   String _errorMessage = '';
   final TextEditingController _cityController = TextEditingController();
@@ -142,16 +142,20 @@ class _WeatherScreenState extends State<WeatherScreen> {
     try {
       await MongoDataBase.connect();
       final wishlistItems = await MongoDataBase.fetchWishlistItems(userEmail);
-      final weatherList = <WeatherData>[];
+      final weatherList = <Map<String, dynamic>>[];
       for (var item in wishlistItems) {
         final lat = item['latitude'] as double?;
         final lng = item['longitude'] as double?;
+        final placeName = item['placeName'] as String? ?? 'Unknown';
         if (lat != null && lng != null) {
           try {
             final weather = await _weatherService.getWeatherByLatLng(lat, lng);
-            weatherList.add(weather);
+            weatherList.add({
+              'placeName': placeName,
+              'weather': weather,
+            });
           } catch (e) {
-            print('Failed to fetch weather for ${item['placeName']}: $e');
+            print('Failed to fetch weather for $placeName: $e');
           }
         }
       }
@@ -178,6 +182,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(
                 controller: _cityController,
@@ -198,12 +203,14 @@ class _WeatherScreenState extends State<WeatherScreen> {
               ),
               const SizedBox(height: 16),
               if (_isLoading)
-                const CircularProgressIndicator()
+                const Center(child: CircularProgressIndicator())
               else if (_errorMessage.isNotEmpty)
-                Text(
-                  _errorMessage,
-                  style: const TextStyle(color: Colors.red, fontSize: 16),
-                  textAlign: TextAlign.center,
+                Center(
+                  child: Text(
+                    _errorMessage,
+                    style: const TextStyle(color: Colors.red, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
                 )
               else if (_weatherData != null)
                 Column(
@@ -251,7 +258,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 padding: const EdgeInsets.only(top: 8.0),
                                 child: _weatherData!.iconName.isNotEmpty
                                     ? _getIconFromName(_weatherData!.iconName)
-                                    : const Icon(Icons.help_outline, size: 55.0),
+                                    : const Icon(Icons.help_outline, size: 40.0),
                               ),
                             ),
                           ],
@@ -265,35 +272,44 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 'Wishlist Locations Weather',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              ..._wishlistWeatherData.map((weather) => ExpansionTile(
-                    title: Row(
+              const SizedBox(height: 8),
+              ..._wishlistWeatherData.map((entry) => Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ExpansionTile(
+                      title: Center(
+                        child: Text(
+                          entry['placeName'],
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      leading: entry['weather'].iconName.isNotEmpty
+                          ? _getIconFromName(entry['weather'].iconName)
+                          : const Icon(Icons.help_outline, size: 40.0),
                       children: [
-                        weather.iconName.isNotEmpty
-                            ? _getIconFromName(weather.iconName)
-                            : const Icon(Icons.help_outline, size: 40.0),
-                        const SizedBox(width: 10),
-                        Text(
-                          '${weather.temperature} °C',
-                          style: const TextStyle(fontSize: 18),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Center(
+                                child: entry['weather'].iconName.isNotEmpty
+                                    ? _getIconFromName(entry['weather'].iconName)
+                                    : const Icon(Icons.help_outline, size: 40.0),
+                              ),
+                              const Divider(height: 20),
+                              _buildWeatherRow('', entry['weather'].weatherDescription),
+                              _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
+                              _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
+                              _buildWeatherRow('Wind Speed', '${entry['weather'].windSpeed} m/s'),
+                              _buildWeatherRow('Time', entry['weather'].time),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildWeatherRow('City', weather.cityName),
-                            _buildWeatherRow('Description', weather.weatherDescription),
-                            _buildWeatherRow('Temperature', '${weather.temperature} °C'),
-                            _buildWeatherRow('Humidity', '${weather.humidity}%'),
-                            _buildWeatherRow('Wind Speed', '${weather.windSpeed} m/s'),
-                            _buildWeatherRow('Time', weather.time),
-                          ],
-                        ),
-                      ),
-                    ],
                   )),
             ],
           ),
@@ -304,18 +320,39 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   Widget _buildWeatherRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16),
-          ),
+          label.isEmpty
+              ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width - 64.0, // Account for 16.0 padding on both sides
+                  ),
+                  child: Text(
+                    value,
+                    style: const TextStyle(fontSize: 16),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                  ),
+                )
+              : Expanded(
+                  child: Text(
+                    value,
+                    style: const TextStyle(fontSize: 16),
+                    textAlign: TextAlign.right,
+                    softWrap: true,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
         ],
       ),
     );
@@ -324,21 +361,21 @@ class _WeatherScreenState extends State<WeatherScreen> {
   Icon _getIconFromName(String iconName) {
     switch (iconName) {
       case 'clear-day':
-        return const Icon(Icons.wb_sunny, color: Colors.orange, size: 55.0);
+        return const Icon(Icons.wb_sunny, color: Colors.orange, size: 40.0);
       case 'clear-night':
-        return const Icon(Icons.nightlight_round, color: Colors.blueGrey, size: 55.0);
+        return const Icon(Icons.nightlight_round, color: Colors.blueGrey, size: 40.0);
       case 'rain':
-        return const Icon(Icons.beach_access, color: Colors.blue, size: 55.0);
+        return const Icon(Icons.beach_access, color: Colors.blue, size: 40.0);
       case 'snow':
-        return const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 55.0);
+        return const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 40.0);
       case 'cloudy':
       case 'partly-cloudy-day':
       case 'partly-cloudy-night':
-        return const Icon(Icons.cloud, color: Colors.grey, size: 55.0);
+        return const Icon(Icons.cloud, color: Colors.grey, size: 40.0);
       case 'wind':
-        return const Icon(Icons.air, color: Colors.teal, size: 55.0);
+        return const Icon(Icons.air, color: Colors.teal, size: 40.0);
       default:
-        return const Icon(Icons.help_outline, size: 55.0);
+        return const Icon(Icons.help_outline, size: 40.0);
     }
   }
 

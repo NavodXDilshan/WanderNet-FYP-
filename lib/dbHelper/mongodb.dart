@@ -6,12 +6,15 @@ class MongoDataBase {
   static mongo.Db? _dbWishlist;
   static mongo.Db? _dbMarket;
   static mongo.Db? _dbChats;
+  static mongo.Db? _dbReports;
   static mongo.DbCollection? _postsCollection;
   static mongo.DbCollection? _wishlistCollection;
   static mongo.DbCollection? _marketCollection;
   static mongo.DbCollection? _chatCollection;
+  static mongo.DbCollection? _reportsCollection;
   static bool _isConnected = false;
   static bool _isChatsConnected = false;
+  static bool _isReportsConnected = false;
 
   static Future<void> connect() async {
     try {
@@ -48,6 +51,21 @@ class MongoDataBase {
     }
   }
 
+  static Future<void> connectToReports() async {
+    try {
+      if (_isReportsConnected) return;
+
+      _dbReports = await mongo.Db.create(MONGO_URL_reports);
+      await _dbReports!.open();
+      _reportsCollection = _dbReports!.collection('reported-markets');
+      _isReportsConnected = true;
+      print('MongoDB reports database connected successfully');
+    } catch (e) {
+      print('Error connecting to reports MongoDB: $e');
+      rethrow;
+    }
+  }
+
   static void _ensureInitialized() {
     if (!_isConnected || _marketCollection == null || _postsCollection == null || _wishlistCollection == null) {
       throw StateError('MongoDataBase is not initialized. Call connect() first.');
@@ -57,6 +75,12 @@ class MongoDataBase {
   static void _ensureChatsInitialized() {
     if (!_isChatsConnected || _dbChats == null) {
       throw StateError('Chats database is not initialized. Call connectToChats() first.');
+    }
+  }
+
+  static void _ensureReportsInitialized() {
+    if (!_isReportsConnected || _dbReports == null || _reportsCollection == null) {
+      throw StateError('Reports database is not initialized. Call connectToReports() first.');
     }
   }
 
@@ -302,14 +326,29 @@ class MongoDataBase {
     }
   }
 
+  static Future<void> insertReport(Map<String, dynamic> reportData) async {
+    try {
+      _ensureReportsInitialized();
+      await _reportsCollection!.insertOne(reportData);
+      print('Report inserted successfully');
+    } catch (e) {
+      print('Error inserting report: $e');
+      rethrow;
+    }
+  }
+
   static String _getChatCollectionName(String senderEmail, String receiverEmail) {
     final emails = [senderEmail, receiverEmail]..sort();
     return '${emails[0]}-${emails[1]}';
   }
 
-  // New getter to access _dbChats
   static mongo.Db get chatDb {
     _ensureChatsInitialized();
     return _dbChats!;
+  }
+
+  static mongo.Db get reportsDb {
+    _ensureReportsInitialized();
+    return _dbReports!;
   }
 }

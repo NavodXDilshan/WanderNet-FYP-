@@ -13,3 +13,5 @@ const COLLECTION_NAME_MARKET="marketplace";
 const MONGO_URL_chats="mongodb+srv://kmnavoddilshan:NJj9WAAEjavgxBgK@cluster0.vighfql.mongodb.net/chats?retryWrites=true&w=majority&appName=Cluster0";
 // const COLLECTION_NAME_MARKET="marketplace";
 
+const MONGO_URL_reports="mongodb+srv://kmnavoddilshan:NJj9WAAEjavgxBgK@cluster0.vighfql.mongodb.net/reports?retryWrites=true&w=majority&appName=Cluster0";
+

@@ -35,7 +35,7 @@ class MarketItemModel {
 
   factory MarketItemModel.fromMap(Map<String, dynamic> map) {
     return MarketItemModel(
-      id: map['_id']?.toHexString(),
+      id: map['_id'] is mongo.ObjectId ? map['_id'].toHexString() : map['_id'],
       name: map['name'] ?? '',
       price: map['price'] ?? '',
       imageUrl: map['imageUrl'],
@@ -383,6 +383,7 @@ class _MarketState extends State<Market> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => MarketItemDetailPage(
+                    itemId: item.id!,
                     name: item.name,
                     imageUrl: item.imageUrl,
                     price: item.price,
@@ -554,7 +555,7 @@ class _MarketState extends State<Market> {
       await MongoDataBase.connectToChats();
       final currentUserEmail = 'k.m.navoddilshan@gmail.com';
       final sellerEmail = "";
-      final messages = await MongoDataBase.fetchChatMessages(currentUserEmail,sellerEmail);
+      final messages = await MongoDataBase.fetchChatMessages(currentUserEmail, sellerEmail);
       final conversations = <Map<String, dynamic>>[];
       final seenConversations = <String>{};
 
@@ -827,6 +828,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
 }
 
 class MarketItemDetailPage extends StatelessWidget {
+  final String itemId;
   final String name;
   final String? imageUrl;
   final String price;
@@ -838,6 +840,7 @@ class MarketItemDetailPage extends StatelessWidget {
 
   const MarketItemDetailPage({
     Key? key,
+    required this.itemId,
     required this.name,
     this.imageUrl,
     required this.price,
@@ -850,6 +853,74 @@ class MarketItemDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final List<String> reportReasons = [
+      'Inappropriate content',
+      'Spam or scam',
+      'Misleading information',
+      'Other',
+    ];
+
+    void showReportDialog() {
+      String? selectedReason;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Report Seller'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Select a reason for reporting:'),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Reason'),
+                value: selectedReason,
+                items: reportReasons
+                    .map((reason) => DropdownMenuItem(value: reason, child: Text(reason)))
+                    .toList(),
+                onChanged: (value) => selectedReason = value,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (selectedReason != null) {
+                  try {
+                    await MongoDataBase.connectToReports();
+                    await MongoDataBase.insertReport({
+                      'itemId': itemId,
+                      'itemName': name,
+                      'sellerEmail': userEmail,
+                      'reporterEmail': 'k.m.navoddilshan@gmail.com',
+                      'reason': selectedReason,
+                      'createdAt': DateTime.now().toIso8601String(),
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Report submitted successfully')),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error submitting report: $e')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select a reason')),
+                  );
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1034,6 +1105,18 @@ class MarketItemDetailPage extends StatelessWidget {
                   ),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton(
+                onPressed: showReportDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: const Text('Report Seller'),
+              ),
+            ),
           ],
         ),
       ),
