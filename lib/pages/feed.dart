@@ -27,7 +27,7 @@ class _FeedState extends State<Feed> {
       backgroundColor: Colors.white,
       endDrawer: drawerBar(context),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.blue,
+        backgroundColor: Colors.lightBlueAccent,
         foregroundColor: Colors.white,
         onPressed: () async {
           final result = await Navigator.push(
