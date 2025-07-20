@@ -36,6 +36,30 @@ class PostCard extends StatelessWidget {
     }
   }
 
+  String _getTimeAgo(DateTime dateTime) {
+  final now = DateTime.now();
+  final difference = now.difference(dateTime);
+
+  if (difference.inSeconds < 60) {
+    return 'Just now';
+  } else if (difference.inMinutes < 60) {
+    return '${difference.inMinutes}m ago';
+  } else if (difference.inHours < 24) {
+    return '${difference.inHours}h ago';
+  } else if (difference.inDays < 7) {
+    return '${difference.inDays}d ago';
+  } else if (difference.inDays < 30) {
+    final weeks = (difference.inDays / 7).floor();
+    return '${weeks}w ago';
+  } else if (difference.inDays < 365) {
+    final months = (difference.inDays / 30).floor();
+    return '${months}mo ago';
+  } else {
+    final years = (difference.inDays / 365).floor();
+    return '${years}y ago';
+  }
+}
+
   Widget _buildModernInteractionButton({
     required IconData icon,
     required IconData activeIcon,
@@ -226,7 +250,7 @@ class PostCard extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      post.timeAgo,
+                                      _getTimeAgo(post.createdAt),
                                       style: TextStyle(
                                         color: Colors.grey.shade600,
                                         fontSize: 13,

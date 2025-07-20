@@ -27,6 +27,8 @@ class _FeedState extends State<Feed> {
       backgroundColor: Colors.white,
       endDrawer: drawerBar(context),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -83,6 +85,7 @@ class _FeedState extends State<Feed> {
                       commentsList: postData['commentsList'] != null
                           ? List<Map<String, dynamic>>.from(postData['commentsList'])
                           : [],
+                      createdAt: DateTime.parse(postData['createdAt'] ?? DateTime.now().toIso8601String()),
                     );
                     return PostCard(
                       post: post,
