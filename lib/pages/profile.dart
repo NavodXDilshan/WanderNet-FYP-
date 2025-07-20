@@ -183,6 +183,7 @@ class _ProfileState extends State<Profile> {
       location: "Colombo, Sri Lanka",
       latitude: 6.9271,
       longitude: 79.8612,
+      createdAt: DateTime.now(),
       placeId: null,
     );
 
