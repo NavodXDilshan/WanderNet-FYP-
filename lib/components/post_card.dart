@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app/models/post_model.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/photo_gallery.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PostCard extends StatelessWidget {
   final PostModel post;
@@ -37,28 +38,38 @@ class PostCard extends StatelessWidget {
   }
 
   String _getTimeAgo(DateTime dateTime) {
-  final now = DateTime.now();
-  final difference = now.difference(dateTime);
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
 
-  if (difference.inSeconds < 60) {
-    return 'Just now';
-  } else if (difference.inMinutes < 60) {
-    return '${difference.inMinutes}m ago';
-  } else if (difference.inHours < 24) {
-    return '${difference.inHours}h ago';
-  } else if (difference.inDays < 7) {
-    return '${difference.inDays}d ago';
-  } else if (difference.inDays < 30) {
-    final weeks = (difference.inDays / 7).floor();
-    return '${weeks}w ago';
-  } else if (difference.inDays < 365) {
-    final months = (difference.inDays / 30).floor();
-    return '${months}mo ago';
-  } else {
-    final years = (difference.inDays / 365).floor();
-    return '${years}y ago';
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return '${weeks}w ago';
+    } else if (difference.inDays < 365) {
+      final months = (difference.inDays / 30).floor();
+      return '${months}mo ago';
+    } else {
+      final years = (difference.inDays / 365).floor();
+      return '${years}y ago';
+    }
   }
-}
+
+  // Add this helper method to the PostCard class
+  void _openInMaps(String location, double latitude, double longitude) async {
+    final url = 'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else {
+      throw 'Could not launch $url';
+    }
+  }
 
   Widget _buildModernInteractionButton({
     required IconData icon,
@@ -277,55 +288,65 @@ class PostCard extends StatelessWidget {
                     if (post.location != null) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Colors.blue.shade50, Colors.indigo.shade50],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(8),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              if (post.latitude != null && post.longitude != null) {
+                                _openInMaps(post.location!, post.latitude!, post.longitude!);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.blue.shade50, Colors.indigo.shade50],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                                child: Icon(
-                                  Icons.location_on,
-                                  size: 16,
-                                  color: Colors.blue.shade600,
-                                ),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      post.location!,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blue.shade800,
-                                      ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade100,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    if (post.latitude != null && post.longitude != null)
-                                      Text(
-                                        '${post.latitude!.toStringAsFixed(4)}, ${post.longitude!.toStringAsFixed(4)}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.blue.shade600,
+                                    child: Icon(
+                                      Icons.location_on,
+                                      size: 16,
+                                      color: Colors.blue.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          post.location!,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.blue.shade800,
+                                          ),
                                         ),
-                                      ),
-                                  ],
-                                ),
+                                        if (post.latitude != null && post.longitude != null)
+                                          Text(
+                                            '${post.latitude!.toStringAsFixed(4)}, ${post.longitude!.toStringAsFixed(4)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.blue.shade600,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
