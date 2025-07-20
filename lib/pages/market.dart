@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
-import 'package:app/dbHelper/constant.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -106,32 +105,31 @@ class _MarketState extends State<Market> {
     _searchController.addListener(_onSearchChanged);
   }
 
-  Future<void> _loadItems() async {
+Future<void> _loadItems() async {
+  setState(() {
+    isLoading = true;
+  });
+  try {
+    final posts = await MongoDataBase.fetchMarketItems();
     setState(() {
-      isLoading = true;
+      items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
+      _filterItems();
     });
-    try {
-      await MongoDataBase.connect();
-      final posts = await MongoDataBase.fetchMarketItems();
-      setState(() {
-        items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
-        _filterItems();
-      });
-    } catch (e) {
-      print('Error loading market items: $e');
-      setState(() {
-        items = [];
-        filteredItems = [];
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load items: $e')),
-      );
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
+  } catch (e) {
+    print('Error loading market items: $e');
+    setState(() {
+      items = [];
+      filteredItems = [];
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to load items: $e')),
+    );
+  } finally {
+    setState(() {
+      isLoading = false;
+    });
   }
+}
 
   void _onSearchChanged() {
     setState(() {
@@ -784,33 +782,32 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        TextButton(
-          onPressed: () async {
-            if (_nameController.text.isNotEmpty && _priceController.text.isNotEmpty) {
-              final newItem = MarketItemModel(
-                name: _nameController.text,
-                price: _priceController.text,
-                imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
-                description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
-                username: 'Navod',
-                userEmail: 'k.m.navoddilshan@gmail.com',
-                category: selectedCategory,
-                location: _selectedLocation,
-              );
-              try {
-                await MongoDataBase.connect();
-                await MongoDataBase.insertMarketItem(newItem.toMap());
-                Navigator.pop(context);
-                widget.onItemAdded();
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error adding item: $e')),
-                );
-              }
-            }
-          },
-          child: const Text('Add'),
-        ),
+  TextButton(
+    onPressed: () async {
+      if (_nameController.text.isNotEmpty && _priceController.text.isNotEmpty) {
+        final newItem = MarketItemModel(
+          name: _nameController.text,
+          price: _priceController.text,
+          imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
+          description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+          username: 'Navod',
+          userEmail: 'k.m.navoddilshan@gmail.com',
+          category: selectedCategory,
+          location: _selectedLocation,
+        );
+        try {
+          await MongoDataBase.insertMarketItem(newItem.toMap());
+          Navigator.pop(context);
+          widget.onItemAdded();
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error adding item: $e')),
+          );
+        }
+      }
+    },
+    child: const Text('Add'),
+    )
       ],
     );
   }
@@ -1212,30 +1209,28 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
     }
   }
 
-  Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
-
-    try {
-      await MongoDataBase.connectToChats();
-      await MongoDataBase.insertChatMessage(
-        currentUserEmail,
-        widget.sellerEmail,
-        {
-          'text': _messageController.text.trim(),
-          'sender': currentUserEmail,
-          'receiver': widget.sellerEmail,
-          'createdAt': DateTime.now().toIso8601String(),
-        },
-      );
-      _messageController.clear();
-      await _loadMessages();
-    } catch (e) {
-      print('Error sending message: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: $e')),
-      );
-    }
+Future<void> _sendMessage() async {
+  if (_messageController.text.trim().isEmpty) return;
+  try {
+    await MongoDataBase.insertChatMessage(
+      currentUserEmail,
+      widget.sellerEmail,
+      {
+        'text': _messageController.text.trim(),
+        'sender': currentUserEmail,
+        'receiver': widget.sellerEmail,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+    );
+    _messageController.clear();
+    await _loadMessages();
+  } catch (e) {
+    print('Error sending message: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to send message: $e')),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

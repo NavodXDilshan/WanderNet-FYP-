@@ -15,6 +15,27 @@ class _FeedState extends State<Feed> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final String currentUserId = 'navod_dilshan';
   final String userEmail = 'k.m.navoddilshan@gmail.com';
+  List<Map<String, dynamic>>? _cachedWishlistItems;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWishlistItems();
+  }
+
+  Future<void> _loadWishlistItems() async {
+    try {
+      final items = await MongoDataBase.fetchWishlistItems(userEmail);
+      setState(() {
+        _cachedWishlistItems = items;
+      });
+    } catch (e) {
+      print('Error loading wishlist items: $e');
+      setState(() {
+        _cachedWishlistItems = [];
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +91,7 @@ class _FeedState extends State<Feed> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          await _loadWishlistItems(); // Refresh wishlist cache
           setState(() {}); // Rebuild FutureBuilder
         },
         child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -122,7 +144,319 @@ class _FeedState extends State<Feed> {
     );
   }
 
-  // Helper function to parse String or num to int
+  Widget _buildPostCard(BuildContext context, PostModel post) {
+    return FutureBuilder<bool>(
+      future: MongoDataBase.hasUserLiked(post.id, currentUserId),
+      builder: (context, likeSnapshot) {
+        if (likeSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        bool isLiked = likeSnapshot.data ?? false;
+        bool isShared = _cachedWishlistItems?.any((item) => item['placeId'] == post.placeId && post.placeId != null) ?? false;
+        bool showCommentInput = false;
+        bool showComments = false;
+        Color likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+        Color commentColor = Colors.grey[600]!;
+        Color shareColor = isShared ? Colors.green : Colors.grey[600]!;
+        final commentController = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setCardState) {
+            return Card(
+              color: const Color.fromARGB(255, 251, 217, 169),
+              margin: const EdgeInsets.only(bottom: 10),
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundImage: AssetImage(post.userAvatar),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              post.userName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              post.timeAgo,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (post.location != null) ...[
+                      Text(
+                        '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
+                    Text(
+                      post.content,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    if (post.imagePath != null) ...[
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!, width: 1),
+                          ),
+                          child: Image.asset(
+                            post.imagePath!,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("${post.likes} Likes"),
+                        Text("${post.comments} Comments"),
+                        Text("${post.shares} Shares"),
+                      ],
+                    ),
+                    const Divider(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildInteractionButton(
+                          icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                          icolor: likeColor,
+                          label: isLiked ? "Unlike" : "Like",
+                          onTap: () async {
+                            try {
+                              setCardState(() {
+                                isLiked = !isLiked;
+                                likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+                              });
+                              if (isLiked) {
+                                await MongoDataBase.likePost(post.id, currentUserId);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Post liked")),
+                                );
+                              } else {
+                                await MongoDataBase.unlikePost(post.id, currentUserId);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Post unliked")),
+                                );
+                              }
+                              setState(() {}); // Refresh to update likes count
+                            } catch (e) {
+                              setCardState(() {
+                                isLiked = !isLiked; // Revert state on error
+                                likeColor = isLiked ? Colors.red : Colors.grey[600]!;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Error ${isLiked ? 'liking' : 'unliking'} post: $e")),
+                              );
+                            }
+                          },
+                        ),
+                        _buildInteractionButton(
+                          icon: Icons.comment_outlined,
+                          icolor: commentColor,
+                          label: "Comment",
+                          onTap: () {
+                            setCardState(() {
+                              showCommentInput = !showCommentInput;
+                              commentColor = showCommentInput ? Colors.blue : Colors.grey[600]!;
+                            });
+                          },
+                        ),
+                        _buildInteractionButton(
+                          icon: Icons.add_location_alt,
+                          icolor: shareColor,
+                          label: isShared ? "Remove" : "Add",
+                          onTap: () async {
+                            if (post.location == null || post.latitude == null || post.longitude == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("No location data available for this post")),
+                              );
+                              return;
+                            }
+                            try {
+                              setCardState(() {
+                                isShared = !isShared;
+                                shareColor = isShared ? Colors.green : Colors.grey[600]!;
+                              });
+                              if (isShared) {
+                                await MongoDataBase.insertWishlistItem(userEmail, {
+                                  'placeName': post.location,
+                                  'latitude': post.latitude,
+                                  'longitude': post.longitude,
+                                  'placeId': post.placeId ?? '',
+                                  'createdAt': DateTime.now().toIso8601String(),
+                                });
+                                await _loadWishlistItems(); // Update cache
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text("Added ${post.location} to wishlist")),
+                                );
+                              } else {
+                                await MongoDataBase.removeWishlistItem(userEmail, post.placeId ?? '');
+                                await _loadWishlistItems(); // Update cache
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text("Removed ${post.location} from wishlist")),
+                                );
+                              }
+                            } catch (e) {
+                              setCardState(() {
+                                isShared = !isShared; // Revert state on error
+                                shareColor = isShared ? Colors.green : Colors.grey[600]!;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Failed to ${isShared ? 'add to' : 'remove from'} wishlist: $e")),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    if (showCommentInput) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: commentController,
+                              decoration: const InputDecoration(
+                                hintText: "Write a comment...",
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            icon: const Icon(Icons.send, color: Colors.blue),
+                            onPressed: () async {
+                              final commentText = commentController.text.trim();
+                              if (commentText.isNotEmpty) {
+                                try {
+                                  await MongoDataBase.insertComment(
+                                    post.id,
+                                    currentUserId,
+                                    'Navod Dilshan',
+                                    commentText,
+                                  );
+                                  commentController.clear();
+                                  setCardState(() {
+                                    showCommentInput = false;
+                                    commentColor = Colors.grey[600]!;
+                                  });
+                                  setState(() {}); // Refresh to update comments
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Comment added")),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Error adding comment: $e")),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (post.commentsList.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Divider(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Comments",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setCardState(() {
+                                showComments = !showComments;
+                              });
+                            },
+                            child: Text(
+                              showComments ? "Hide Comments" : "Show Comments (${post.comments})",
+                              style: const TextStyle(fontSize: 12, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (showComments)
+                        ...post.commentsList.map((comment) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      comment['userName'] ?? 'Unknown',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      _formatCommentTime(comment['createdAt']),
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  comment['content'] ?? '',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   int? _parseToInt(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toInt();
@@ -130,7 +464,6 @@ class _FeedState extends State<Feed> {
     return null;
   }
 
-  // Helper function to parse String or num to double
   double? _parseToDouble(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
@@ -159,7 +492,7 @@ class _FeedState extends State<Feed> {
             leading: Image.asset("assets/images/user1.png"),
             title: const Text('Profile'),
             onTap: () {
-              Navigator.pop(context); // Close drawer
+              Navigator.pop(context);
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const Profile()),
@@ -226,332 +559,6 @@ class _FeedState extends State<Feed> {
     );
   }
 
-  Widget _buildPostCard(BuildContext context, PostModel post) {
-    return FutureBuilder<bool>(
-      future: Future.wait([
-        MongoDataBase.hasUserLiked(post.id, currentUserId),
-        // Check if post's location is in wishlist
-        MongoDataBase.fetchWishlistItems(userEmail).then((items) {
-          return items.any((item) => item['placeId'] == post.placeId && post.placeId != null);
-        }),
-      ]).then((results) => results[1] as bool), // Use wishlist result
-      builder: (context, wishlistSnapshot) {
-        if (wishlistSnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        bool isShared = wishlistSnapshot.data ?? false;
-        return FutureBuilder<bool>(
-          future: MongoDataBase.hasUserLiked(post.id, currentUserId),
-          builder: (context, likeSnapshot) {
-            if (likeSnapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            bool isLiked = likeSnapshot.data ?? false;
-            bool showCommentInput = false;
-            bool showComments = false; // New state for collapsing comments
-            Color likeColor = isLiked ? Colors.red : Colors.grey[600]!;
-            Color commentColor = Colors.grey[600]!;
-            Color shareColor = isShared ? Colors.green : Colors.grey[600]!;
-            final commentController = TextEditingController();
-
-            return StatefulBuilder(
-              builder: (context, setCardState) {
-                return Card(
-                  color: const Color.fromARGB(255, 251, 217, 169),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundImage: AssetImage(post.userAvatar),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  post.userName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  post.timeAgo,
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        if (post.location != null) ...[
-                          Text(
-                            '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                        ],
-                        Text(
-                          post.content,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        if (post.imagePath != null) ...[
-                          const SizedBox(height: 10),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey[300]!, width: 1),
-                              ),
-                              child: Image.asset(
-                                post.imagePath!,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("${post.likes} Likes"),
-                            Text("${post.comments} Comments"),
-                            Text("${post.shares} Shares"),
-                          ],
-                        ),
-                        const Divider(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildInteractionButton(
-                              icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                              icolor: likeColor,
-                              label: isLiked ? "Unlike" : "Like",
-                              onTap: () async {
-                                try {
-                                  setCardState(() {
-                                    isLiked = !isLiked;
-                                    likeColor = isLiked ? Colors.red : Colors.grey[600]!;
-                                  });
-                                  if (isLiked) {
-                                    await MongoDataBase.likePost(post.id, currentUserId);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("Post liked")),
-                                    );
-                                  } else {
-                                    await MongoDataBase.unlikePost(post.id, currentUserId);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("Post unliked")),
-                                    );
-                                  }
-                                  setState(() {}); // Refresh to update likes count
-                                } catch (e) {
-                                  setCardState(() {
-                                    isLiked = !isLiked; // Revert state on error
-                                    likeColor = isLiked ? Colors.red : Colors.grey[600]!;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("Error ${isLiked ? 'liking' : 'unliking'} post: $e")),
-                                  );
-                                }
-                              },
-                            ),
-                            _buildInteractionButton(
-                              icon: Icons.comment_outlined,
-                              icolor: commentColor,
-                              label: "Comment",
-                              onTap: () {
-                                setCardState(() {
-                                  showCommentInput = !showCommentInput;
-                                  commentColor = showCommentInput ? Colors.blue : Colors.grey[600]!;
-                                });
-                              },
-                            ),
-                            _buildInteractionButton(
-                              icon: Icons.add_location_alt,
-                              icolor: shareColor,
-                              label: isShared ? "Remove" : "Add",
-                              onTap: () async {
-                                if (post.location == null || post.latitude == null || post.longitude == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("No location data available for this post")),
-                                  );
-                                  return;
-                                }
-                                try {
-                                  setCardState(() {
-                                    isShared = !isShared;
-                                    shareColor = isShared ? Colors.green : Colors.grey[600]!;
-                                  });
-                                  if (isShared) {
-                                    await MongoDataBase.insertWishlistItem(userEmail, {
-                                      'placeName': post.location,
-                                      'latitude': post.latitude,
-                                      'longitude': post.longitude,
-                                      'placeId': post.placeId ?? '',
-                                      'createdAt': DateTime.now().toIso8601String(),
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text("Added ${post.location} to wishlist")),
-                                    );
-                                  } else {
-                                    await MongoDataBase.removeWishlistItem(userEmail, post.placeId ?? '');
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text("Removed ${post.location} from wishlist")),
-                                    );
-                                  }
-                                } catch (e) {
-                                  setCardState(() {
-                                    isShared = !isShared; // Revert state on error
-                                    shareColor = isShared ? Colors.green : Colors.grey[600]!;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("Failed to ${isShared ? 'add to' : 'remove from'} wishlist: $e")),
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        if (showCommentInput) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: commentController,
-                                  decoration: const InputDecoration(
-                                    hintText: "Write a comment...",
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              IconButton(
-                                icon: const Icon(Icons.send, color: Colors.blue),
-                                onPressed: () async {
-                                  final commentText = commentController.text.trim();
-                                  if (commentText.isNotEmpty) {
-                                    try {
-                                      await MongoDataBase.insertComment(
-                                        post.id,
-                                        currentUserId,
-                                        'Navod Dilshan',
-                                        commentText,
-                                      );
-                                      commentController.clear();
-                                      setCardState(() {
-                                        showCommentInput = false;
-                                        commentColor = Colors.grey[600]!;
-                                      });
-                                      setState(() {}); // Refresh to update comments
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("Comment added")),
-                                      );
-                                    } catch (e) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text("Error adding comment: $e")),
-                                      );
-                                    }
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (post.commentsList.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          const Divider(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "Comments",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  setCardState(() {
-                                    showComments = !showComments;
-                                  });
-                                },
-                                child: Text(
-                                  showComments ? "Hide Comments" : "Show Comments (${post.comments})",
-                                  style: const TextStyle(fontSize: 12, color: Colors.blue),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (showComments)
-                            ...post.commentsList.map((comment) {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 5),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          comment['userName'] ?? 'Unknown',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          _formatCommentTime(comment['createdAt']),
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      comment['content'] ?? '',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Format comment timestamp
   String _formatCommentTime(String? createdAt) {
     if (createdAt == null) return 'Unknown time';
     try {
