@@ -5,8 +5,6 @@ import 'package:app/models/wild_model.dart';
 import 'package:app/models/entertainment_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
 
 class Homepage extends StatefulWidget {

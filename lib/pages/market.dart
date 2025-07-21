@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'marketItemPage.dart';
 import 'marketChat.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:flutter/scheduler.dart';
 
 class AuthService {
   static final SupabaseClient supabase = Supabase.instance.client;
@@ -20,11 +22,23 @@ class AuthService {
       print('No authenticated user found');
       return {'userEmail': null, 'username': null, 'userId': null};
     }
-    return {
-      'userEmail': user.email,
-      'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
-      'userId': user.id,
-    };
+    try {
+      if (supabase.auth.currentSession?.isExpired ?? true) {
+        await supabase.auth.refreshSession();
+      }
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
+        'userId': user.id,
+      };
+    } catch (e) {
+      print('Error refreshing session or fetching user info: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
+        'userId': user.id,
+      };
+    }
   }
 }
 
@@ -55,17 +69,20 @@ class MarketItemModel {
 
   factory MarketItemModel.fromMap(Map<String, dynamic> map) {
     return MarketItemModel(
-      id: map['_id'] is mongo.ObjectId ? map['_id'].toHexString() : map['_id'],
-      name: map['name'] ?? '',
-      price: map['price'] ?? '',
-      imageUrl: map['imageUrl'],
-      description: map['description'],
-      username: map['username'] ?? 'Guest',
-      userEmail: map['userEmail'] ?? '',
-      userId: map['userId'] ?? '',
-      category: map['category'] ?? 'All',
+      id: map['_id'] is mongo.ObjectId ? map['_id'].toHexString() : map['_id']?.toString(),
+      name: map['name']?.toString() ?? '',
+      price: map['price']?.toString() ?? '',
+      imageUrl: map['imageUrl']?.toString(),
+      description: map['description']?.toString(),
+      username: map['username']?.toString() ?? 'Guest',
+      userEmail: map['userEmail']?.toString() ?? '',
+      userId: map['userId']?.toString() ?? '',
+      category: map['category']?.toString() ?? 'All',
       location: map['location'] != null
-          ? LatLng(map['location']['latitude'] ?? 0.0, map['location']['longitude'] ?? 0.0)
+          ? LatLng(
+              (map['location']['latitude'] as num?)?.toDouble() ?? 0.0,
+              (map['location']['longitude'] as num?)?.toDouble() ?? 0.0,
+            )
           : null,
     );
   }
@@ -123,6 +140,7 @@ class _MarketState extends State<Market> {
   String? userId;
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final RefreshController _refreshController = RefreshController(initialRefresh: false);
 
   @override
   void initState() {
@@ -146,6 +164,7 @@ class _MarketState extends State<Market> {
       isLoading = true;
     });
     try {
+      await MongoDataBase.connectToChats(); // Ensure connection
       final posts = await MongoDataBase.fetchMarketItems();
       setState(() {
         items = posts.map((e) => MarketItemModel.fromMap(e)).toList();
@@ -157,9 +176,11 @@ class _MarketState extends State<Market> {
         items = [];
         filteredItems = [];
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load items: $e')),
-      );
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load items: $e')),
+        );
+      });
     } finally {
       setState(() {
         isLoading = false;
@@ -224,11 +245,11 @@ class _MarketState extends State<Market> {
                 ? _loadingIndicator()
                 : filteredItems.isEmpty
                     ? Center(
-                child: Container(
-                margin: EdgeInsets.all(50.0), // or only/top/bottom etc.
-                child: Text('No items found.'),
-                  ),
-                    )
+                        child: Container(
+                          margin: const EdgeInsets.all(50.0),
+                          child: const Text('No items found.'),
+                        ),
+                      )
                     : _itemsGrid(),
           ],
         ),
@@ -243,9 +264,9 @@ class _MarketState extends State<Market> {
 
   AppBar _appBar() {
     return AppBar(
-      title: Text(
+      title: const Text(
         'Marketplace',
-        style: const TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontSize: 20),
+        style: TextStyle(color: Colors.white, fontSize: 20),
       ),
       centerTitle: true,
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
@@ -254,6 +275,7 @@ class _MarketState extends State<Market> {
         child: Container(
           margin: const EdgeInsets.all(10),
           alignment: Alignment.center,
+
           decoration: BoxDecoration(
             color: const Color.fromARGB(255, 240, 144, 9),
             borderRadius: BorderRadius.circular(10),
@@ -265,8 +287,8 @@ class _MarketState extends State<Market> {
           onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           icon: SvgPicture.asset(
             'assets/icons/dots.svg',
-            width: 5,
-            height: 5,
+            width: 8,
+            height: 8,
           ),
         ),
       ],
@@ -314,10 +336,7 @@ class _MarketState extends State<Market> {
                 endIndent: 10,
                 thickness: 0.1,
               ),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: SvgPicture.asset('assets/icons/Filter.svg'),
-              ),
+
             ],
           ),
           border: OutlineInputBorder(
@@ -374,6 +393,7 @@ class _MarketState extends State<Market> {
                         category.iconPath,
                         width: 24,
                         height: 24,
+                       
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -527,9 +547,8 @@ class _MarketState extends State<Market> {
               alignment: Alignment.center,
               child: Text(
                 'Inbox',
-                
                 style: const TextStyle(
-                  color: Color.fromARGB(255, 255, 255, 255),
+                  color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Poppins',
@@ -538,58 +557,67 @@ class _MarketState extends State<Market> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchConversations(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No chat participants found.'));
-                }
-                final conversations = snapshot.data!;
-                return ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final conversation = conversations[index];
-                    final participantName = conversation['username'] ?? conversation['sellerEmail'];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey[300],
-                        child: Text(
-                          participantName.isNotEmpty ? participantName[0].toUpperCase() : '?',
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                      ),
-                      title: Text(
-                        participantName,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      onTap: () {
-                        if (userEmail == null || userId == null || username == null) {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
-                          return;
-                        }
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatWithSeller(
-                              sellerEmail: conversation['sellerEmail'],
-                              itemName: conversation['username'],
-                              currentUserEmail: userEmail!,
-                              currentUsername: username!,
-                              currentUserId: userId!,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
+            child: SmartRefresher(
+              controller: _refreshController,
+              enablePullDown: true,
+              onRefresh: () async {
+                await _loadUserInfo();
+                setState(() {});
+                _refreshController.refreshCompleted();
               },
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _fetchConversations(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error loading chats: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('No chat participants found.'));
+                  }
+                  final conversations = snapshot.data!;
+                  return ListView.builder(
+                    itemCount: conversations.length,
+                    itemBuilder: (context, index) {
+                      final conversation = conversations[index];
+                      final participantName = conversation['username'] ?? conversation['sellerEmail'] ?? 'Unknown';
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.grey[300],
+                          child: Text(
+                            participantName.isNotEmpty ? participantName[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.black),
+                          ),
+                        ),
+                        title: Text(
+                          participantName,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onTap: () {
+                          if (userEmail == null || userId == null || username == null) {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+                            return;
+                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatWithSeller(
+                                sellerEmail: conversation['sellerEmail'] ?? '',
+                                itemName: conversation['username'] ?? conversation['sellerEmail'] ?? 'Unknown',
+                                currentUserEmail: userEmail!,
+                                currentUsername: username!,
+                                currentUserId: userId!,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -603,10 +631,12 @@ class _MarketState extends State<Market> {
       return [];
     }
     try {
+      // Ensure database connection
+      await MongoDataBase.connectToChats();
       final db = MongoDataBase.chatDb;
       final collectionNames = (await db.getCollectionNames()).whereType<String>().toList();
       final userCollections = collectionNames
-          .where((name) => name.contains(userEmail!))
+          .where((name) => name.contains(userEmail!) && !name.startsWith(userEmail! + '-' + userEmail!))
           .toList();
       print('Found collections for user $userEmail: $userCollections');
 
@@ -614,23 +644,22 @@ class _MarketState extends State<Market> {
       final seenParticipants = <String>{};
 
       for (var collectionName in userCollections) {
-        final otherUserEmail = collectionName
-            .split('-')
-            .firstWhere((email) => email != userEmail!, orElse: () => '');
+        final emails = collectionName.split('-');
+        final otherUserEmail = emails.firstWhere((email) => email != userEmail!, orElse: () => '');
         if (otherUserEmail.isEmpty) {
           print('Skipping invalid collection: $collectionName');
           continue;
         }
         final messages = await MongoDataBase.fetchChatMessages(userEmail!, otherUserEmail);
         for (var message in messages) {
-          final sender = message['sender'] as String? ?? '';
-          final receiver = message['receiver'] as String? ?? '';
+          final sender = message['sender']?.toString() ?? '';
+          final receiver = message['receiver']?.toString() ?? '';
           final participantEmail = sender == userEmail ? receiver : sender;
           if (participantEmail.isEmpty) {
             print('Skipping message with empty sender/receiver: $message');
             continue;
           }
-          final senderName = message['senderName'] as String? ?? participantEmail;
+          final senderName = message['senderName']?.toString() ?? participantEmail;
           final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
           final conversationKey = participantEmail;
 
@@ -648,9 +677,11 @@ class _MarketState extends State<Market> {
       return conversations;
     } catch (e) {
       print('Error fetching conversations: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to fetch chat participants: $e')),
-      );
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to fetch chat participants: $e')),
+        );
+      });
       return [];
     }
   }
@@ -658,6 +689,7 @@ class _MarketState extends State<Market> {
   @override
   void dispose() {
     _searchController.dispose();
+    _refreshController.dispose();
     super.dispose();
   }
 }
@@ -947,6 +979,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               location: _selectedLocation,
             );
             try {
+              await MongoDataBase.connectToChats();
               await MongoDataBase.insertMarketItem(newItem.toMap());
               Navigator.pop(context);
               widget.onItemAdded();
