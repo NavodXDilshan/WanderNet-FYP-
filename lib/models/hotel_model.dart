@@ -8,6 +8,7 @@ class HotelLocationModel {
   String? rating;
   String? description;
   String? imageUrl;
+  String? city;
 
   HotelLocationModel({
     required this.name,
@@ -15,6 +16,7 @@ class HotelLocationModel {
     this.rating,
     this.description,
     this.imageUrl,
+    this.city,
   });
 
   static Future<List<HotelLocationModel>> getHotelLocations() async {
