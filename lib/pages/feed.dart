@@ -5,6 +5,7 @@ import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/pages/create_post.dart';
+import 'package:app/services/auth_service.dart';
 
 
 class Feed extends StatefulWidget {
@@ -16,8 +17,25 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final String currentUserId = 'navod_dilshan';
-  final String userEmail = 'k.m.navoddilshan@gmail.com';
+  String? currentUserId;
+  String? userEmail;
+  String? username;
+
+   @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    MongoDataBase.connect();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      userEmail = userInfo['userEmail'];
+      username = userInfo['username'];
+      currentUserId = userInfo['userId'];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,8 +107,9 @@ class _FeedState extends State<Feed> {
                     );
                     return PostCard(
                       post: post,
-                      currentUserId: currentUserId,
-                      userEmail: userEmail,
+                      currentUserId: currentUserId ?? '',
+                      userEmail: userEmail ?? '',
+                      username: username ?? '',
                       onInteraction: () {
                         setState(() {}); // Refresh the feed when needed
                       },

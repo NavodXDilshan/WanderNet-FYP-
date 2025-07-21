@@ -8,6 +8,7 @@ class PostCard extends StatelessWidget {
   final PostModel post;
   final String currentUserId;
   final String userEmail;
+  final String username;
   final VoidCallback onInteraction;
 
   const PostCard({
@@ -15,6 +16,7 @@ class PostCard extends StatelessWidget {
     required this.post,
     required this.currentUserId,
     required this.userEmail,
+    required this.username,
     required this.onInteraction,
   });
 
@@ -615,13 +617,13 @@ class PostCard extends StatelessWidget {
                                         await MongoDataBase.insertComment(
                                           post.id,
                                           currentUserId,
-                                          'Navod Dilshan',
+                                          username,
                                           commentText,
                                         );
                                         // Update the local post data
                                         post.commentsList.add({
                                             'userId': currentUserId,
-                                            'userName': 'Navod Dilshan',
+                                            'userName': username,
                                             'content': commentText,
                                             'createdAt': DateTime.now().toIso8601String(),
                                         });
