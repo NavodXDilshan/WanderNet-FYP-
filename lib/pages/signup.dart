@@ -101,6 +101,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Image.asset(
+              'assets/images/WN1.png',
+              width: 150,
+              height: 150,
+            ),
+            const SizedBox(height: 24),
             TextField(
               controller: _usernameController,
               decoration: const InputDecoration(

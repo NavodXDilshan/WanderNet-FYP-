@@ -5,6 +5,7 @@ import '../services/weather_service.dart';
 import '../models/weather_data.dart';
 import '../dbHelper/mongodb.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AuthService {
   static final SupabaseClient supabase = Supabase.instance.client;
@@ -230,158 +231,220 @@ class _WeatherScreenState extends State<WeatherScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Weather Tracker - ${username ?? 'Guest'}',
-          style: const TextStyle(color: Colors.black, fontSize: 20),
+          'Weather Tracker',
+          style: const TextStyle(color: Color.fromARGB(255, 237, 230, 230), fontSize: 20),
         ),
         centerTitle: true,
         backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _cityController,
-                decoration: InputDecoration(
-                  labelText: 'Enter place',
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: _fetchWeatherByCity,
-                  ),
-                  border: const OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _fetchWeatherByCity(),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/images/weather.jpg'),
+                fit: BoxFit.cover,
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _fetchWeatherByLocation,
-                child: const Text('Use Current Location'),
-              ),
-              const SizedBox(height: 16),
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (_errorMessage.isNotEmpty)
-                Center(
-                  child: Text(
-                    _errorMessage,
-                    style: const TextStyle(color: Colors.red, fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else if (_weatherData != null)
-                Column(
-                  children: [
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              _weatherData!.cityName,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _weatherData!.weatherDescription,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+            ),
+            child: Container(
+              color: Colors.black.withOpacity(0.4), // Semi-transparent overlay for readability
+            ),
+          ),
+          SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 0, left: 0, right: 0),
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.11),
+                          blurRadius: 40,
+                          spreadRadius: 0.0,
                         ),
-                      ),
+                      ],
                     ),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildWeatherRow('Temperature', '${_weatherData!.temperature} °C'),
-                            _buildWeatherRow('Humidity', '${_weatherData!.humidity}%'),
-                            _buildWeatherRow('Wind Speed', '${_weatherData!.windSpeed} m/s'),
-                            _buildWeatherRow('Time', _weatherData!.time),
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: _weatherData!.iconName.isNotEmpty
-                                    ? _getIconFromName(_weatherData!.iconName)
-                                    : const Icon(Icons.help_outline, size: 40.0),
-                              ),
-                            ),
-                          ],
+                    child: TextField(
+                      controller: _cityController,
+                      decoration: InputDecoration(
+                        labelText: 'Enter place',
+                        filled: true,
+                        fillColor: const Color.fromARGB(255, 255, 255, 255),
+                        contentPadding: const EdgeInsets.all(15),
+                        hintText: 'search',
+                        hintStyle: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: 16),
-              const Text(
-                'Wishlist Locations Weather',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              if (_wishlistWeatherData.isEmpty && userEmail != null)
-                const Center(child: Text('No wishlist items found.'))
-              else if (_wishlistWeatherData.isEmpty && userEmail == null)
-                Center(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage())),
-                    child: const Text('Sign in to view wishlist'),
-                  ),
-                )
-              else
-                ..._wishlistWeatherData.map((entry) => Card(
-                      margin: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: ExpansionTile(
-                        title: Center(
-                          child: Text(
-                            entry['placeName'],
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                        prefixIcon: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: SvgPicture.asset('assets/icons/Search.svg'),
+                        ),
+                        suffixIcon: SizedBox(
+                          width: 100,
+                          child: IntrinsicHeight(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                const VerticalDivider(
+                                  color: Colors.black,
+                                  indent: 10,
+                                  endIndent: 10,
+                                  thickness: 0.1,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: SvgPicture.asset('assets/icons/Filter.svg'),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        leading: entry['weather'].iconName.isNotEmpty
-                            ? _getIconFromName(entry['weather'].iconName)
-                            : const Icon(Icons.help_outline, size: 40.0),
-                        children: [
-                          Padding(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onSubmitted: (_) => _fetchWeatherByCity(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    alignment: Alignment.center,
+                    child: ElevatedButton(
+                      onPressed: _fetchWeatherByLocation,
+                      child: const Text('Use Current Location'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_errorMessage.isNotEmpty)
+                    Center(
+                      child: Text(
+                        _errorMessage,
+                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else if (_weatherData != null)
+                    Column(
+                      children: [
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _weatherData!.cityName,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color.fromARGB(255, 240, 144, 9),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _weatherData!.weatherDescription,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Card(
+                          child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                _buildWeatherRow('Temperature', '${_weatherData!.temperature} °C'),
+                                _buildWeatherRow('Humidity', '${_weatherData!.humidity}%'),
+                                _buildWeatherRow('Wind Speed', '${_weatherData!.windSpeed} m/s'),
+                                _buildWeatherRow('Time', _weatherData!.time),
                                 Center(
-                                  child: entry['weather'].iconName.isNotEmpty
-                                      ? _getIconFromName(entry['weather'].iconName)
-                                      : const Icon(Icons.help_outline, size: 40.0),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: _weatherData!.iconName.isNotEmpty
+                                        ? _getIconFromName(_weatherData!.iconName)
+                                        : const Icon(Icons.help_outline, size: 40.0),
+                                  ),
                                 ),
-                                const Divider(height: 20),
-                                _buildWeatherRow('', entry['weather'].weatherDescription),
-                                _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
-                                _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
-                                _buildWeatherRow('Wind Speed', '${entry['weather'].windSpeed} m/s'),
-                                _buildWeatherRow('Time', entry['weather'].time),
                               ],
                             ),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Wishlist Locations Weather',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_wishlistWeatherData.isEmpty && userEmail != null)
+                    const Center(child: Text('No wishlist items found.'))
+                  else if (_wishlistWeatherData.isEmpty && userEmail == null)
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage())),
+                        child: const Text('Sign in to view wishlist'),
                       ),
-                    )),
-            ],
+                    )
+                  else
+                    ..._wishlistWeatherData.map((entry) => Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: ExpansionTile(
+                            title: Center(
+                              child: Text(
+                                entry['placeName'],
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            leading: entry['weather'].iconName.isNotEmpty
+                                ? _getIconFromName(entry['weather'].iconName)
+                                : const Icon(Icons.help_outline, size: 40.0),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: entry['weather'].iconName.isNotEmpty
+                                          ? _getIconFromName(entry['weather'].iconName)
+                                          : const Icon(Icons.help_outline, size: 40.0),
+                                    ),
+                                    const Divider(height: 20),
+                                    _buildWeatherRow('', entry['weather'].weatherDescription),
+                                    _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
+                                    _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
+                                    _buildWeatherRow('Wind Speed', '${entry['weather'].windSpeed} m/s'),
+                                    _buildWeatherRow('Time', entry['weather'].time),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -426,22 +489,24 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Icon _getIconFromName(String iconName) {
+  Widget _getIconFromName(String iconName) {
     switch (iconName) {
       case 'clear-day':
-        return const Icon(Icons.wb_sunny, color: Colors.orange, size: 40.0);
+        return Image.asset('assets/icons/sunny.png', width: 40, height: 40);
       case 'clear-night':
-        return const Icon(Icons.nightlight_round, color: Colors.blueGrey, size: 40.0);
+        return Image.asset('assets/icons/moon-and-stars.png', width: 40, height: 40);
       case 'rain':
-        return const Icon(Icons.beach_access, color: Colors.blue, size: 40.0);
+        return Image.asset('assets/icons/heavy-rain.png', width: 40, height: 40);
       case 'snow':
-        return const Icon(Icons.ac_unit, color: Colors.lightBlueAccent, size: 40.0);
+        return Image.asset('assets/icons/snow.png', width: 40, height: 40);
       case 'cloudy':
+        return Image.asset('assets/icons/clouds.png', width: 40, height: 40);
       case 'partly-cloudy-day':
+        return Image.asset('assets/icons/cloudy-day.png', width: 40, height: 40);
       case 'partly-cloudy-night':
-        return const Icon(Icons.cloud, color: Colors.grey, size: 40.0);
+        return Image.asset('assets/icons/partly-cloudy-night.png', width: 40, height: 40);
       case 'wind':
-        return const Icon(Icons.air, color: Colors.teal, size: 40.0);
+        return Image.asset('assets/icons/wind.png', width: 40, height: 40);
       default:
         return const Icon(Icons.help_outline, size: 40.0);
     }
