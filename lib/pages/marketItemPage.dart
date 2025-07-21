@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'marketChat.dart';
+import 'market.dart'; // Import market.dart for AuthService
 
 class MarketItemDetailPage extends StatelessWidget {
   final String itemId;
@@ -195,37 +196,36 @@ class MarketItemDetailPage extends StatelessWidget {
                       ),
                       ElevatedButton(
                         onPressed: () async {
-                          final userInfo = await Supabase.instance.client.auth.currentUser != null
-                              ? {
-                                  'userEmail': Supabase.instance.client.auth.currentUser!.email,
-                                  'username': (await Supabase.instance.client
-                                          .from('profiles')
-                                          .select('username')
-                                          .eq('user_id', Supabase.instance.client.auth.currentUser!.id)
-                                          .single())['username'] ??
-                                      'Guest',
-                                  'userId': Supabase.instance.client.auth.currentUser!.id,
-                                }
-                              : {'userEmail': null, 'username': null, 'userId': null};
-                          final currentUserEmail = userInfo['userEmail'];
-                          final currentUsername = userInfo['username'];
-                          final currentUserId = userInfo['userId'];
-                          if (currentUserEmail == null || currentUserId == null || currentUsername == null) {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
-                            return;
-                          }
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatWithSeller(
-                                sellerEmail: userEmail,
-                                itemName: name,
-                                currentUserEmail: currentUserEmail,
-                                currentUsername: currentUsername,
-                                currentUserId: currentUserId,
+                          try {
+                            final userInfo = await AuthService.getUserInfo();
+                            final currentUserEmail = userInfo['userEmail'];
+                            final currentUsername = userInfo['username'];
+                            final currentUserId = userInfo['userId'];
+                            print('User info: email=$currentUserEmail, username=$currentUsername, userId=$currentUserId');
+                            if (currentUserEmail == null || currentUserId == null || currentUsername == null || currentUsername == 'Guest') {
+                              print('Navigation to SignInPage due to missing or invalid user info');
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
+                              return;
+                            }
+                            print('Navigating to ChatWithSeller with sellerEmail=$userEmail, itemName=$name');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatWithSeller(
+                                  sellerEmail: userEmail,
+                                  itemName: name,
+                                  currentUserEmail: currentUserEmail,
+                                  currentUsername: currentUsername,
+                                  currentUserId: currentUserId,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          } catch (e) {
+                            print('Error fetching user info for chat: $e');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error starting chat: $e')),
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color.fromARGB(255, 240, 144, 9),

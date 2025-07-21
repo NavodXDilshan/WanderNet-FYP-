@@ -126,7 +126,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Chat about ${widget.itemName}',
+          'Chat - ${widget.itemName}',
           style: const TextStyle(
             color: Colors.black,
             fontSize: 20,
@@ -185,15 +185,6 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    message['senderName'] ?? (isCurrentUser ? widget.currentUsername : 'Seller'),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: isCurrentUser ? Colors.white : Colors.black,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
                                   Text(
                                     message['text'] ?? '',
                                     style: TextStyle(

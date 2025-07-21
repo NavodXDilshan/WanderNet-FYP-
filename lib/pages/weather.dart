@@ -407,9 +407,11 @@ class _WeatherScreenState extends State<WeatherScreen> {
                           child: ExpansionTile(
                             title: Center(
                               child: Text(
+                                textAlign: TextAlign.center,
                                 entry['placeName'],
                                 style: const TextStyle(
-                                  fontSize: 20,
+                                  
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -423,12 +425,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Center(
-                                      child: entry['weather'].iconName.isNotEmpty
-                                          ? _getIconFromName(entry['weather'].iconName)
-                                          : const Icon(Icons.help_outline, size: 40.0),
-                                    ),
-                                    const Divider(height: 20),
+                                    // Center(
+                                    //   child: entry['weather'].iconName.isNotEmpty
+                                    //       ? _getIconFromName(entry['weather'].iconName)
+                                    //       : const Icon(Icons.help_outline, size: 40.0),
+                                    // ),
+                                    const Divider(height: 15),
                                     _buildWeatherRow('', entry['weather'].weatherDescription),
                                     _buildWeatherRow('Temperature', '${entry['weather'].temperature} °C'),
                                     _buildWeatherRow('Humidity', '${entry['weather'].humidity}%'),
@@ -469,7 +471,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   ),
                   child: Text(
                     value,
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 15, color: Colors.grey),
                     textAlign: TextAlign.center,
                     softWrap: true,
                   ),
@@ -477,7 +479,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
               : Expanded(
                   child: Text(
                     value,
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 15, color: Color.fromARGB(255, 230, 150, 13)),
                     textAlign: TextAlign.right,
                     softWrap: true,
                     maxLines: 1,

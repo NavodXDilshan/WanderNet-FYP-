@@ -4,11 +4,11 @@ import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:google_places_flutter/google_places_flutter.dart';
-import 'package:google_places_flutter/model/prediction.dart';
-import 'dart:async';
-import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'marketItemPage.dart';
+import 'marketChat.dart';
 
 class AuthService {
   static final SupabaseClient supabase = Supabase.instance.client;
@@ -20,25 +20,11 @@ class AuthService {
       print('No authenticated user found');
       return {'userEmail': null, 'username': null, 'userId': null};
     }
-    try {
-      final response = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('user_id', user.id)
-          .single();
-      return {
-        'userEmail': user.email,
-        'username': response['username'] as String? ?? 'Guest',
-        'userId': user.id
-      };
-    } catch (e) {
-      print('Error fetching username from profiles: $e');
-      return {
-        'userEmail': user.email,
-        'username': user.userMetadata?['username'] as String? ?? 'Guest',
-        'userId': user.id
-      };
-    }
+    return {
+      'userEmail': user.email,
+      'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
+      'userId': user.id,
+    };
   }
 }
 
@@ -110,10 +96,10 @@ class MarketCategory {
 
   static List<MarketCategory> getCategories() {
     return [
-      MarketCategory(name: 'All', iconPath: 'assets/icons/all.svg'),
-      MarketCategory(name: 'Electronics', iconPath: 'assets/icons/electronics.svg'),
-      MarketCategory(name: 'Clothing', iconPath: 'assets/icons/clothing.svg'),
-      MarketCategory(name: 'Furniture', iconPath: 'assets/icons/furniture.svg'),
+      MarketCategory(name: 'All', iconPath: 'assets/icons/all.png'),
+      MarketCategory(name: 'Electronics', iconPath: 'assets/icons/electronics.png'),
+      MarketCategory(name: 'Clothing', iconPath: 'assets/icons/clothing.png'),
+      MarketCategory(name: 'Furniture', iconPath: 'assets/icons/furniture.png'),
     ];
   }
 }
@@ -226,18 +212,23 @@ class _MarketState extends State<Market> {
       key: _scaffoldKey,
       appBar: _appBar(),
       backgroundColor: Colors.white,
-      drawer: _buildDrawer(),
+      endDrawer: _buildDrawer(),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _searchField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
             _categoriesSection(),
             isLoading
                 ? _loadingIndicator()
                 : filteredItems.isEmpty
-                    ? const Center(child: Text('No items found.'))
+                    ? Center(
+                child: Container(
+                margin: EdgeInsets.all(50.0), // or only/top/bottom etc.
+                child: Text('No items found.'),
+                  ),
+                    )
                     : _itemsGrid(),
           ],
         ),
@@ -253,8 +244,8 @@ class _MarketState extends State<Market> {
   AppBar _appBar() {
     return AppBar(
       title: Text(
-        'Marketplace - ${username ?? 'Guest'}',
-        style: const TextStyle(color: Colors.black, fontSize: 20),
+        'Marketplace',
+        style: const TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontSize: 20),
       ),
       centerTitle: true,
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
@@ -263,11 +254,6 @@ class _MarketState extends State<Market> {
         child: Container(
           margin: const EdgeInsets.all(10),
           alignment: Alignment.center,
-          child: SvgPicture.asset(
-            'assets/icons/Arrow - Left 2.svg',
-            width: 20,
-            height: 20,
-          ),
           decoration: BoxDecoration(
             color: const Color.fromARGB(255, 240, 144, 9),
             borderRadius: BorderRadius.circular(10),
@@ -276,11 +262,11 @@ class _MarketState extends State<Market> {
       ),
       actions: [
         IconButton(
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           icon: SvgPicture.asset(
             'assets/icons/dots.svg',
-            width: 24,
-            height: 24,
+            width: 5,
+            height: 5,
           ),
         ),
       ],
@@ -384,14 +370,10 @@ class _MarketState extends State<Market> {
                   ),
                   child: Row(
                     children: [
-                      SvgPicture.asset(
+                      Image.asset(
                         category.iconPath,
                         width: 24,
                         height: 24,
-                        colorFilter: ColorFilter.mode(
-                          isSelected ? Colors.blue : Colors.black,
-                          BlendMode.srcIn,
-                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -455,21 +437,24 @@ class _MarketState extends State<Market> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                item.imageUrl != null
+                item.imageUrl != null && item.imageUrl!.isNotEmpty
                     ? Image.network(
                         item.imageUrl!,
                         height: 120,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          height: 120,
-                          color: Colors.grey[300],
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 50,
-                            color: Colors.grey,
-                          ),
-                        ),
+                        errorBuilder: (context, error, stackTrace) {
+                          print('Image load error for ${item.imageUrl}: $error');
+                          return Container(
+                            height: 120,
+                            color: Colors.grey[300],
+                            child: const Icon(
+                              Icons.image_not_supported,
+                              size: 50,
+                              color: Colors.grey,
+                            ),
+                          );
+                        },
                       )
                     : Container(
                         height: 120,
@@ -539,11 +524,12 @@ class _MarketState extends State<Market> {
               color: Color.fromARGB(255, 240, 144, 9),
             ),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.center,
               child: Text(
-                'Ongoing Chats - ${username ?? 'Guest'}',
+                'Inbox',
+                
                 style: const TextStyle(
-                  color: Colors.black,
+                  color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Poppins',
@@ -562,28 +548,26 @@ class _MarketState extends State<Market> {
                   return Center(child: Text('Error: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No ongoing chats.'));
+                  return const Center(child: Text('No chat participants found.'));
                 }
                 final conversations = snapshot.data!;
                 return ListView.builder(
                   itemCount: conversations.length,
                   itemBuilder: (context, index) {
                     final conversation = conversations[index];
-                    final sellerEmail = conversation['sellerEmail'];
-                    final itemName = conversation['itemName'];
+                    final participantName = conversation['username'] ?? conversation['sellerEmail'];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.grey[300],
                         child: Text(
-                          sellerEmail[0].toUpperCase(),
+                          participantName.isNotEmpty ? participantName[0].toUpperCase() : '?',
                           style: const TextStyle(color: Colors.black),
                         ),
                       ),
                       title: Text(
-                        sellerEmail,
+                        participantName,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      subtitle: Text('Item: $itemName'),
                       onTap: () {
                         if (userEmail == null || userId == null || username == null) {
                           Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
@@ -593,8 +577,8 @@ class _MarketState extends State<Market> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ChatWithSeller(
-                              sellerEmail: sellerEmail,
-                              itemName: itemName,
+                              sellerEmail: conversation['sellerEmail'],
+                              itemName: conversation['username'],
                               currentUserEmail: userEmail!,
                               currentUsername: username!,
                               currentUserId: userId!,
@@ -615,33 +599,59 @@ class _MarketState extends State<Market> {
 
   Future<List<Map<String, dynamic>>> _fetchConversations() async {
     if (userEmail == null) {
+      print('No user email, returning empty conversations');
       return [];
     }
     try {
-      await MongoDataBase.connectToChats();
-      final messages = await MongoDataBase.fetchChatMessages(userEmail!, '');
+      final db = MongoDataBase.chatDb;
+      final collectionNames = (await db.getCollectionNames()).whereType<String>().toList();
+      final userCollections = collectionNames
+          .where((name) => name.contains(userEmail!))
+          .toList();
+      print('Found collections for user $userEmail: $userCollections');
+
       final conversations = <Map<String, dynamic>>[];
-      final seenConversations = <String>{};
+      final seenParticipants = <String>{};
 
-      for (var message in messages) {
-        final sender = message['sender'] as String;
-        final receiver = message['receiver'] as String;
-        final otherUser = sender == userEmail ? receiver : sender;
-        final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
-        final conversationKey = '$otherUser-$itemName';
+      for (var collectionName in userCollections) {
+        final otherUserEmail = collectionName
+            .split('-')
+            .firstWhere((email) => email != userEmail!, orElse: () => '');
+        if (otherUserEmail.isEmpty) {
+          print('Skipping invalid collection: $collectionName');
+          continue;
+        }
+        final messages = await MongoDataBase.fetchChatMessages(userEmail!, otherUserEmail);
+        for (var message in messages) {
+          final sender = message['sender'] as String? ?? '';
+          final receiver = message['receiver'] as String? ?? '';
+          final participantEmail = sender == userEmail ? receiver : sender;
+          if (participantEmail.isEmpty) {
+            print('Skipping message with empty sender/receiver: $message');
+            continue;
+          }
+          final senderName = message['senderName'] as String? ?? participantEmail;
+          final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
+          final conversationKey = participantEmail;
 
-        if (!seenConversations.contains(conversationKey)) {
-          conversations.add({
-            'sellerEmail': otherUser,
-            'itemName': itemName,
-          });
-          seenConversations.add(conversationKey);
+          if (!seenParticipants.contains(conversationKey)) {
+            conversations.add({
+              'sellerEmail': participantEmail,
+              'username': senderName,
+              'itemName': itemName,
+            });
+            seenParticipants.add(conversationKey);
+          }
         }
       }
+      print('Fetched ${conversations.length} chat participants');
       return conversations;
     } catch (e) {
       print('Error fetching conversations: $e');
-      throw Exception('Failed to fetch conversations: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to fetch chat participants: $e')),
+      );
+      return [];
     }
   }
 
@@ -738,27 +748,72 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
+    print('Map created in LocationPickerDialog');
   }
 
-  void _addMarker(Prediction prediction) {
-    if (prediction.lat != null && prediction.lng != null) {
-      final lat = double.tryParse(prediction.lat!);
-      final lng = double.tryParse(prediction.lng!);
-      if (lat != null && lng != null) {
-        setState(() {
-          _selectedLocation = LatLng(lat, lng);
-          _markers = {
-            Marker(
-              markerId: MarkerId(prediction.placeId ?? prediction.description ?? 'selected_location'),
-              position: _selectedLocation!,
-              infoWindow: InfoWindow(title: prediction.description ?? 'Selected Location'),
-            ),
-          };
-        });
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_selectedLocation!, 15.0),
-        );
+  Future<void> _addMarkerFromSearch() async {
+    final locationName = _searchController.text.trim();
+    if (locationName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a location name')),
+      );
+      return;
+    }
+
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?address=$locationName&components=country:LK&key=$googleApiKey',
+      );
+      final response = await http.get(url);
+
+      print('Geocoding API response status: ${response.statusCode}');
+      print('Geocoding API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['status'] == 'OK' && json['results'].isNotEmpty) {
+          final location = json['results'][0]['geometry']['location'];
+          final placeName = json['results'][0]['formatted_address'] ?? locationName;
+          final lat = location['lat'] as double;
+          final lng = location['lng'] as double;
+
+          setState(() {
+            _selectedLocation = LatLng(lat, lng);
+            _markers = {
+              Marker(
+                markerId: MarkerId(placeName),
+                position: _selectedLocation!,
+                infoWindow: InfoWindow(title: placeName),
+              ),
+            };
+          });
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLngZoom(_selectedLocation!, 15.0),
+          );
+          _searchController.clear();
+          print('Marker added at: $placeName ($lat, $lng)');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location not found. Try a different name (e.g., Colombo, LK).')),
+          );
+        }
+      } else {
+        final error = jsonDecode(response.body)['error_message'] ?? 'Unknown error';
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid Google API key. Verify at console.cloud.google.com.')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to fetch location: ${response.statusCode}, $error')),
+          );
+        }
       }
+    } catch (e) {
+      print('Error adding marker from search: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding location: $e')),
+      );
     }
   }
 
@@ -804,11 +859,19 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               },
             ),
             const SizedBox(height: 10),
-            GooglePlaceAutoCompleteTextField(
-              textEditingController: _searchController,
-              googleAPIKey: googleApiKey,
-              countries: ['LK'],
-              getPlaceDetailWithLatLng: _addMarker,
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search for a location (e.g., Colombo, LK)',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: _addMarkerFromSearch,
+                ),
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onSubmitted: (_) => _addMarkerFromSearch(),
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -872,7 +935,6 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignInPage()));
               return;
             }
-            print('Adding item with username: ${widget.username}');
             final newItem = MarketItemModel(
               name: _nameController.text,
               price: _priceController.text,
@@ -908,591 +970,6 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
     _descriptionController.dispose();
     _imageUrlController.dispose();
     _searchController.dispose();
-    super.dispose();
-  }
-}
-
-class MarketItemDetailPage extends StatelessWidget {
-  final String itemId;
-  final String name;
-  final String? imageUrl;
-  final String price;
-  final String? description;
-  final String username;
-  final String userEmail;
-  final String userId;
-  final String category;
-  final LatLng? location;
-
-  const MarketItemDetailPage({
-    Key? key,
-    required this.itemId,
-    required this.name,
-    this.imageUrl,
-    required this.price,
-    this.description,
-    required this.username,
-    required this.userEmail,
-    required this.userId,
-    required this.category,
-    this.location,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final List<String> reportReasons = [
-      'Inappropriate content',
-      'Spam or scam',
-      'Misleading information',
-      'Other',
-    ];
-
-    void showReportDialog() async {
-      String? selectedReason;
-      final userInfo = await AuthService.getUserInfo();
-      final reporterEmail = userInfo['userEmail'];
-      final reporterId = userInfo['userId'];
-      if (reporterEmail == null || reporterId == null) {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
-        return;
-      }
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Report Seller'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Select a reason for reporting:'),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Reason'),
-                value: selectedReason,
-                items: reportReasons
-                    .map((reason) => DropdownMenuItem(value: reason, child: Text(reason)))
-                    .toList(),
-                onChanged: (value) => selectedReason = value,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (selectedReason != null) {
-                  try {
-                    await MongoDataBase.connectToReports();
-                    await MongoDataBase.insertReport({
-                      'itemId': itemId,
-                      'itemName': name,
-                      'sellerEmail': userEmail,
-                      'sellerId': userId,
-                      'reporterEmail': reporterEmail,
-                      'reporterId': reporterId,
-                      'reason': selectedReason,
-                      'createdAt': DateTime.now().toIso8601String(),
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Report submitted successfully')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error submitting report: $e')),
-                    );
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please select a reason')),
-                  );
-                }
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          name,
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            alignment: Alignment.center,
-            child: SvgPicture.asset(
-              'assets/icons/Arrow - Left 2.svg',
-              width: 20,
-              height: 20,
-            ),
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 240, 144, 9),
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            imageUrl != null
-                ? Image.network(
-                    imageUrl!,
-                    height: 200,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 200,
-                      width: double.infinity,
-                      color: Colors.grey[300],
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        size: 80,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  )
-                : Container(
-                    height: 200,
-                    width: double.infinity,
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      size: 80,
-                      color: Colors.grey,
-                    ),
-                  ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          final userInfo = await AuthService.getUserInfo();
-                          final currentUserEmail = userInfo['userEmail'];
-                          final currentUsername = userInfo['username'];
-                          final currentUserId = userInfo['userId'];
-                          if (currentUserEmail == null || currentUserId == null || currentUsername == null) {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
-                            return;
-                          }
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatWithSeller(
-                                sellerEmail: userEmail,
-                                itemName: name,
-                                currentUserEmail: currentUserEmail,
-                                currentUsername: currentUsername,
-                                currentUserId: currentUserId,
-                              ),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        ),
-                        child: const Text('Chat with the Seller'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    price,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'By: $username',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Contact: $userEmail',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Category: $category',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  if (location != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Location: ${location!.latitude}, ${location!.longitude}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    description ?? 'No description available',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (location != null)
-              SizedBox(
-                height: 200,
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: location!,
-                    zoom: 15,
-                  ),
-                  markers: {
-                    Marker(
-                      markerId: const MarkerId('item-location'),
-                      position: location!,
-                      infoWindow: InfoWindow(title: name),
-                    ),
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  minMaxZoomPreference: const MinMaxZoomPreference(7.0, 15.0),
-                  cameraTargetBounds: CameraTargetBounds(
-                    LatLngBounds(
-                      southwest: const LatLng(5.9167, 79.6522),
-                      northeast: const LatLng(9.8350, 81.8815),
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: showReportDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                child: const Text('Report Seller'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ChatWithSeller extends StatefulWidget {
-  final String sellerEmail;
-  final String itemName;
-  final String currentUserEmail;
-  final String currentUsername;
-  final String currentUserId;
-
-  const ChatWithSeller({
-    Key? key,
-    required this.sellerEmail,
-    required this.itemName,
-    required this.currentUserEmail,
-    required this.currentUsername,
-    required this.currentUserId,
-  }) : super(key: key);
-
-  @override
-  State<ChatWithSeller> createState() => _ChatWithSellerState();
-}
-
-class _ChatWithSellerState extends State<ChatWithSeller> {
-  final TextEditingController _messageController = TextEditingController();
-  List<Map<String, dynamic>> messages = [];
-  bool isLoading = true;
-  Timer? _pollingTimer;
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeChat();
-    _startPolling();
-  }
-
-  Future<void> _initializeChat() async {
-    setState(() {
-      isLoading = true;
-    });
-    try {
-      await MongoDataBase.connectToChats();
-      await _loadMessages();
-    } catch (e) {
-      print('Error initializing chat: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to initialize chat: $e')),
-      );
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final fetchedMessages = await MongoDataBase.fetchChatMessages(
-        widget.currentUserEmail,
-        widget.sellerEmail,
-      );
-      setState(() {
-        messages = fetchedMessages;
-      });
-      _scrollToBottom();
-    } catch (e) {
-      print('Error loading messages: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load messages: $e')),
-      );
-    }
-  }
-
-  void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      try {
-        await _loadMessages();
-      } catch (e) {
-        print('Error polling messages: $e');
-      }
-    });
-  }
-
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      });
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
-    try {
-      await MongoDataBase.insertChatMessage(
-        widget.currentUserEmail,
-        widget.sellerEmail,
-        {
-          'text': _messageController.text.trim(),
-          'sender': widget.currentUserEmail,
-          'senderName': widget.currentUsername,
-          'receiver': widget.sellerEmail,
-          'createdAt': DateTime.now().toIso8601String(),
-        },
-      );
-      _messageController.clear();
-      await _loadMessages();
-    } catch (e) {
-      print('Error sending message: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: $e')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Chat about ${widget.itemName}',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            alignment: Alignment.center,
-            child: SvgPicture.asset(
-              'assets/icons/Arrow - Left 2.svg',
-              width: 20,
-              height: 20,
-            ),
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 240, 144, 9),
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : messages.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No messages yet. Start the conversation!',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(10),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          final isCurrentUser = message['sender'] == widget.currentUserEmail;
-                          return Align(
-                            alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 5),
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: isCurrentUser
-                                    ? const Color.fromARGB(255, 240, 144, 9)
-                                    : Colors.grey[300],
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    message['senderName'] ?? (isCurrentUser ? widget.currentUsername : 'Seller'),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: isCurrentUser ? Colors.white : Colors.black,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    message['text'] ?? '',
-                                    style: TextStyle(
-                                      color: isCurrentUser ? Colors.white : Colors.black,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    DateFormat('hh:mm a').format(
-                                      DateTime.parse(message['createdAt'] ?? DateTime.now().toIso8601String()),
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isCurrentUser ? Colors.white70 : Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-          Container(
-            margin: const EdgeInsets.fromLTRB(0, 0, 0, 15),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                top: BorderSide(color: Colors.grey[300]!),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: const BorderSide(color: Colors.grey),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                    ),
-                    maxLines: null,
-                    keyboardType: TextInputType.multiline,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: const Icon(Icons.send, color: Color.fromARGB(255, 240, 144, 9)),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    _messageController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 }
