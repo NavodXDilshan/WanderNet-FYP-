@@ -99,7 +99,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
     developer.log("something");
 
     // Replace with your backend URL
-    const String backendUrl = 'http://192.168.1.2:3000'; // Update this
+    const String backendUrl = 'http://localhost:3000'; // Update this
     
     // First, prepare the upload
     final prepareResponse = await http.post(

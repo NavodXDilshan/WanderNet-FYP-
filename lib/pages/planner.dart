@@ -186,14 +186,23 @@ class PlannerState extends State<Planner> {
       setState(() {
         wishlistItems = uniqueItems;
         _markers = newMarkers;
+        // Reset selectedStartPlaceId and selectedTargetPlaceId if they are invalid
         if (wishlistItems.isNotEmpty) {
-          selectedStartPlaceId = wishlistItems[0]['placeId'] as String? ?? wishlistItems[0]['placeName'] as String? ?? 'Unknown Place';
-          selectedTargetPlaceId = wishlistItems.length > 1
-              ? (wishlistItems[1]['placeId'] as String? ?? wishlistItems[1]['placeName'] as String? ?? 'Unknown Place')
-              : selectedStartPlaceId;
+          final validStart = wishlistItems.any((item) => item['placeId'] == selectedStartPlaceId || item['placeName'] == selectedStartPlaceId);
+          final validTarget = wishlistItems.any((item) => item['placeId'] == selectedTargetPlaceId || item['placeName'] == selectedTargetPlaceId);
+          
+          selectedStartPlaceId = validStart ? selectedStartPlaceId : (wishlistItems[0]['placeId'] as String? ?? wishlistItems[0]['placeName'] as String? ?? 'Unknown Place');
+          selectedTargetPlaceId = validTarget && wishlistItems.length > 1
+              ? selectedTargetPlaceId
+              : (wishlistItems.length > 1
+                  ? (wishlistItems[1]['placeId'] as String? ?? wishlistItems[1]['placeName'] as String? ?? 'Unknown Place')
+                  : selectedStartPlaceId);
+        } else {
+          selectedStartPlaceId = null;
+          selectedTargetPlaceId = null;
         }
       });
-      print('Markers updated: ${_markers.length}, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
+      print('Wishlist updated: ${wishlistItems.length} items, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
     } catch (e) {
       print('Failed to load wishlist data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -329,8 +338,8 @@ class PlannerState extends State<Planner> {
         return;
       }
 
-      final startIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedStartPlaceId);
-      final targetIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedTargetPlaceId);
+      final startIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedStartPlaceId || item['placeName'] == selectedStartPlaceId);
+      final targetIndex = wishlistItems.indexWhere((item) => item['placeId'] == selectedTargetPlaceId || item['placeName'] == selectedTargetPlaceId);
 
       if (startIndex == -1 || targetIndex == -1) {
         print('Error: Invalid start or target index. Start: $startIndex, Target: $targetIndex');
@@ -350,18 +359,19 @@ class PlannerState extends State<Planner> {
               })
           .toList();
 
+      // Ensure switch_weights and scores match locations length
       final switchWeights = wishlistItems
           .asMap()
           .entries
-          .where((entry) => entry.value['switchWeight'] != null)
-          .map((entry) => entry.value['switchWeight'] as double)
+          .where((entry) => entry.value['latitude'] != null && entry.value['longitude'] != null)
+          .map((entry) => entry.value['switchWeight'] as double? ?? 1.0)
           .toList();
 
       final ratings = wishlistItems
           .asMap()
           .entries
-          .where((entry) => entry.value['rating'] != null)
-          .map((entry) => entry.value['rating'] as double)
+          .where((entry) => entry.value['latitude'] != null && entry.value['longitude'] != null)
+          .map((entry) => entry.value['rating'] as double? ?? 0.0)
           .toList();
 
       final payload = {
@@ -369,15 +379,15 @@ class PlannerState extends State<Planner> {
         'start': startIndex,
         'target': targetIndex,
         'time_limit': timeLimitMinutes,
-        'switch_weights': switchWeights.isNotEmpty ? switchWeights : null,
-        'scores': ratings.isNotEmpty ? ratings : null,
+        'switch_weights': switchWeights.isNotEmpty ? switchWeights : List.filled(locations.length, 1.0),
+        'scores': ratings.isNotEmpty ? ratings : List.filled(locations.length, 0.0),
         'algorithm': algorithmMapping[selectedOption] ?? 'max_nodes',
       };
 
       print('Sending payload to backend: ${jsonEncode(payload)}');
 
       final response = await http.post(
-        Uri.parse('http://192.168.1.3:8000/optimize_route'),
+        Uri.parse('http://localhost:8000/optimize_route'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
@@ -471,7 +481,7 @@ class PlannerState extends State<Planner> {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
       return;
     }
- Tarihi: try {
+    try {
       final lat = attraction['latitude'] as double?;
       final lng = attraction['longitude'] as double?;
       if (lat == null || lng == null) {
@@ -1027,12 +1037,12 @@ class NearbyAttractionsDrawer extends StatelessWidget {
   final Function(Map<String, dynamic>) onAddToWishlist;
   final VoidCallback onRecalculate;
 
-const NearbyAttractionsDrawer({
-  super.key,
-  required this.nearbyAttractions,
-  required this.onAddToWishlist,
-  required this.onRecalculate,
-});
+  const NearbyAttractionsDrawer({
+    super.key,
+    required this.nearbyAttractions,
+    required this.onAddToWishlist,
+    required this.onRecalculate,
+  });
 
   @override
   Widget build(BuildContext context) {
