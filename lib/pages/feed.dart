@@ -137,7 +137,7 @@ class _FeedState extends State<Feed> {
                       userEmail: userEmail ?? '',
                       onInteraction: () {
                         setState(() {}); // Refresh the feed when needed
-                      }, username: '',
+                      }, username: userEmail ?? '',
                     );
                   }).toList(),
                 ),
