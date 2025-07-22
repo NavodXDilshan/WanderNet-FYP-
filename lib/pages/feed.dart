@@ -91,6 +91,7 @@ class _FeedState extends State<Feed> {
                       post: post,
                       currentUserId: currentUserId,
                       userEmail: userEmail,
+                      username: "Adhisha Indumina",
                       onInteraction: () {
                         setState(() {}); // Refresh the feed when needed
                       },
