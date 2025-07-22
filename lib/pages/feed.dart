@@ -5,39 +5,7 @@ import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/pages/create_post.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-class AuthService {
-  static final SupabaseClient supabase = Supabase.instance.client;
-
-  static Future<Map<String, String?>> getUserInfo() async {
-    final user = supabase.auth.currentUser;
-    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
-    if (user == null) {
-      print('No authenticated user found');
-      return {'userEmail': null, 'username': null, 'userId': null};
-    }
-    try {
-      final response = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('user_id', user.id)
-          .single();
-      return {
-        'userEmail': user.email,
-        'username': response['username'] as String? ?? 'Guest',
-        'userId': user.id
-      };
-    } catch (e) {
-      print('Error fetching username from profiles: $e');
-      return {
-        'userEmail': user.email,
-        'username': user.userMetadata?['username'] as String? ?? 'Guest',
-        'userId': user.id
-      };
-    }
-  }
-}
 
 class Feed extends StatefulWidget {
   const Feed({super.key});
@@ -48,47 +16,8 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String? userEmail;
-  String? username;
-  String? userId;
-  List<Map<String, dynamic>>? _cachedWishlistItems;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserInfo();
-  }
-
-  Future<void> _loadUserInfo() async {
-    final userInfo = await AuthService.getUserInfo();
-    setState(() {
-      userEmail = userInfo['userEmail'];
-      username = userInfo['username'];
-      userId = userInfo['userId'];
-    });
-    if (userId != null) {
-      await _loadWishlistItems();
-    }
-  }
-
-  Future<void> _loadWishlistItems() async {
-    if (userId == null) return;
-    try {
-      final items = await MongoDataBase.fetchWishlistItems(userId!);
-      print('Loaded wishlist items for $userId: ${items.length}');
-      setState(() {
-        _cachedWishlistItems = items;
-      });
-    } catch (e) {
-      print('Error loading wishlist items: $e');
-      setState(() {
-        _cachedWishlistItems = [];
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load wishlist: $e')),
-      );
-    }
-  }
+  final String currentUserId = 'navod_dilshan';
+  final String userEmail = 'k.m.navoddilshan@gmail.com';
 
   @override
   Widget build(BuildContext context) {
@@ -101,14 +30,12 @@ class _FeedState extends State<Feed> {
         backgroundColor: Colors.lightBlueAccent,
         foregroundColor: Colors.white,
         onPressed: () async {
-          if (userId == null) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
-            return;
-          }
           final result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const CreatePostPage()),
           );
+          
+          // Only refresh if post was successfully created
           if (result == true) {
             setState(() {}); // Refresh feed
           }
@@ -117,9 +44,9 @@ class _FeedState extends State<Feed> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await _loadWishlistItems();
-          setState(() {});
+          setState(() {}); // Rebuild FutureBuilder
         },
+        //TODO: Implement a reconnect mechanism for MongoDB master connection
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: MongoDataBase.fetchPosts(),
           builder: (context, snapshot) {
@@ -162,11 +89,10 @@ class _FeedState extends State<Feed> {
                     );
                     return PostCard(
                       post: post,
-                      currentUserId: userId ?? 'unknown',
-                      userEmail: userEmail ?? 'unknown',
-                      onInteraction: () async {
-                        await _loadWishlistItems();
-                        setState(() {});
+                      currentUserId: currentUserId,
+                      userEmail: userEmail,
+                      onInteraction: () {
+                        setState(() {}); // Refresh the feed when needed
                       },
                     );
                   }).toList(),
@@ -179,6 +105,7 @@ class _FeedState extends State<Feed> {
     );
   }
 
+  // Helper function to parse String or num to int
   int? _parseToInt(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toInt();
@@ -186,6 +113,7 @@ class _FeedState extends State<Feed> {
     return null;
   }
 
+  // Helper function to parse String or num to double
   double? _parseToDouble(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
@@ -202,9 +130,9 @@ class _FeedState extends State<Feed> {
             decoration: const BoxDecoration(
               color: Color.fromARGB(255, 240, 144, 9),
             ),
-            child: Text(
-              "Menu - ${username ?? 'Guest'}",
-              style: const TextStyle(
+            child: const Text(
+              "Menu",
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,
               ),
@@ -214,19 +142,11 @@ class _FeedState extends State<Feed> {
             leading: Image.asset("assets/images/user1.png"),
             title: const Text('Profile'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context); // Close drawer
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const Profile()),
               );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Logout'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignInPage()));
             },
           ),
         ],
@@ -236,9 +156,9 @@ class _FeedState extends State<Feed> {
 
   AppBar appbar() {
     return AppBar(
-      title: Text(
-        "Feed - ${username ?? 'Guest'}",
-        style: const TextStyle(
+      title: const Text(
+        "Feed",
+        style: TextStyle(
           color: Colors.black,
           fontSize: 18,
           fontWeight: FontWeight.bold,
@@ -289,6 +209,7 @@ class _FeedState extends State<Feed> {
     );
   }
 
+
   Widget _buildLoadingSkeleton() {
     return ListView.builder(
       itemCount: 3,
@@ -317,23 +238,12 @@ class _FeedState extends State<Feed> {
                     ),
                   ],
                 ),
+                // Add more skeleton widgets as needed
               ],
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class SignInPage extends StatelessWidget {
-  const SignInPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sign In')),
-      body: const Center(child: Text('Sign In Page')),
     );
   }
 }

@@ -9,6 +9,7 @@ class HotelLocationModel {
   String? description;
   String? imageUrl;
   String? city;
+  List<Map<String, dynamic>>? reviews; // Added reviews field
 
   HotelLocationModel({
     required this.name,
@@ -17,10 +18,11 @@ class HotelLocationModel {
     this.description,
     this.imageUrl,
     this.city,
+    this.reviews,
   });
 
   static Future<List<HotelLocationModel>> getHotelLocations() async {
-    const apiKey = '5E6B8DAB15DD45B6BD299E1C50DE14C1'; 
+    const apiKey = '5E6B8DAB15DD45B6BD299E1C50DE14C1';
     const baseUrl = 'https://api.content.tripadvisor.com/api/v1';
 
     List<HotelLocationModel> hotelLocations = [
@@ -69,17 +71,39 @@ class HotelLocationModel {
           if (photos.isNotEmpty && photos[0]['images']?['large']?['url'] != null) {
             hotel.imageUrl = photos[0]['images']['large']['url'];
           } else {
-            hotel.imageUrl = null; // No image available
+            hotel.imageUrl = null;
           }
         } else {
           hotel.imageUrl = null;
           print('Failed to load photos for ${hotel.name}: ${photosResponse.statusCode}');
+        }
+
+        // Fetch location reviews
+        final reviewsUrl = '$baseUrl/location/${hotel.locationId}/reviews?language=en&key=$apiKey';
+        final reviewsResponse = await http.get(
+          Uri.parse(reviewsUrl),
+          headers: {'accept': 'application/json'},
+        );
+
+        print('Reviews API Response Status for ${hotel.name}: ${reviewsResponse.statusCode}');
+        print('Reviews API Response Body for ${hotel.name}: ${reviewsResponse.body}');
+
+        if (reviewsResponse.statusCode == 200) {
+          final reviewsData = jsonDecode(reviewsResponse.body);
+          hotel.reviews = (reviewsData['data'] as List?)?.map((review) => {
+            'text': review['text'] ?? 'No review text',
+            'rating': review['rating']?.toString() ?? 'N/A',
+          }).toList() ?? [];
+        } else {
+          hotel.reviews = [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
+          print('Failed to load reviews for ${hotel.name}: ${reviewsResponse.statusCode}');
         }
       } catch (e) {
         print('Error fetching data for ${hotel.name}: $e');
         hotel.rating = 'N/A';
         hotel.description = 'Error loading data';
         hotel.imageUrl = null;
+        hotel.reviews = [{'text': 'Error loading reviews', 'rating': 'N/A'}];
       }
     }
 

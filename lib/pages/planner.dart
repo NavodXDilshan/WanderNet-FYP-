@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:google_places_flutter/google_places_flutter.dart';
 import '../dbHelper/mongodb.dart';
 import 'settings.dart';
 import 'package:http/http.dart' as http;

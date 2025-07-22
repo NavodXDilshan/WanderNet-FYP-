@@ -1,5 +1,6 @@
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:app/dbHelper/constant.dart';
+import '../pages/market.dart'; 
 
 class MongoDataBase {
   static mongo.Db? _dbPosts;
@@ -16,7 +17,7 @@ class MongoDataBase {
   static bool _isChatsConnected = false;
   static bool _isReportsConnected = false;
 
-  static Future<void> connect() async {
+static Future<void> connect() async {
     try {
       if (_isConnected) return;
 
@@ -27,14 +28,38 @@ class MongoDataBase {
       await _dbWishlist!.open();
       await _dbMarket!.open();
       _postsCollection = _dbPosts!.collection('posts');
-      _wishlistCollection = _dbWishlist!.collection('k.m.navoddilshan@gmail.com');
+      _wishlistCollection = _dbWishlist!.collection(await _getCurrentUserEmail()); // Dynamic collection
       _marketCollection = _dbMarket!.collection(COLLECTION_NAME_MARKET);
       _isConnected = true;
       print('MongoDB connected successfully');
+      _startPeriodicPing(); // Keep connection alive
     } catch (e) {
       print('MongoDB connection error: $e');
       rethrow;
     }
+  }
+
+  static Future<String> _getCurrentUserEmail() async {
+    // Placeholder: Replace with actual user email retrieval
+    final userInfo = await AuthService.getUserInfo(); // Assuming AuthService is available
+    return userInfo['userEmail'] ?? 'k.m.navoddilshan@gmail.com';
+  }
+
+  static void _startPeriodicPing() {
+    // Periodic ping to keep connection alive
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(minutes: 5));
+      if (_dbWishlist != null && _dbWishlist!.isConnected) {
+        try {
+          await _dbWishlist!.collection('test').findOne();
+          print('Wishlist connection ping successful');
+        } catch (e) {
+          print('Wishlist ping failed: $e');
+          await MongoDataBase.reconnect();
+        }
+      }
+      return true; // Continue looping
+    });
   }
 
   static Future<void> connectToChats() async {
@@ -352,5 +377,76 @@ class MongoDataBase {
     return _dbReports!;
   }
 
-  
+  /// Checks the connection status for all databases.
+  static Future<void> checkConnection() async {
+    try {
+      await _checkSpecificConnection(_dbPosts, _isConnected);
+      await _checkSpecificConnection(_dbWishlist, _isConnected);
+      await _checkSpecificConnection(_dbMarket, _isConnected);
+      await _checkSpecificConnection(_dbChats, _isChatsConnected);
+      await _checkSpecificConnection(_dbReports, _isReportsConnected);
+    } catch (e) {
+      print('Connection check failed: $e');
+      throw e; // Let the caller handle reconnection
+    }
+  }
+
+  /// Helper method to check a specific database connection.
+  static Future<void> _checkSpecificConnection(mongo.Db? db, bool isConnectedFlag) async {
+    if (db == null || !db.isConnected) {
+      isConnectedFlag = false;
+      throw Exception('Database connection lost');
+    }
+    try {
+      // Use a lightweight query to test connection
+      await db.collection('test').findOne();
+      isConnectedFlag = true;
+    } catch (e) {
+      isConnectedFlag = false;
+      print('Connection check failed for ${db.databaseName}: $e');
+      throw Exception('Connection lost for ${db.databaseName}: $e');
+    }
+  }
+
+  /// Reconnects all databases with exponential backoff.
+  static Future<void> reconnect() async {
+    int retryCount = 0;
+    const int maxRetries = 5;
+    const int maxDelaySeconds = 16;
+
+    while (retryCount < maxRetries) {
+      try {
+        await _reconnectSpecific(_dbPosts, 'posts', connect, _isConnected);
+        await _reconnectSpecific(_dbWishlist, 'wishlist', connect, _isConnected);
+        await _reconnectSpecific(_dbMarket, 'market', connect, _isConnected);
+        await _reconnectSpecific(_dbChats, 'chats', connectToChats, _isChatsConnected);
+        await _reconnectSpecific(_dbReports, 'reports', connectToReports, _isReportsConnected);
+        print('All MongoDB databases reconnected successfully');
+        break;
+      } catch (e) {
+        retryCount++;
+        final delay = Duration(seconds: (1 << retryCount).clamp(1, maxDelaySeconds));
+        print('Reconnection attempt $retryCount/$maxRetries failed: $e. Retrying in $delay');
+        await Future.delayed(delay);
+      }
+    }
+    if (retryCount >= maxRetries) {
+      print('Max retry attempts reached. MongoDB reconnection failed.');
+      throw Exception('Failed to reconnect to MongoDB after $maxRetries attempts');
+    }
+  }
+
+  /// Helper method to reconnect a specific database.
+  static Future<void> _reconnectSpecific(mongo.Db? db, String dbName, Future<void> Function() connectMethod, bool isConnectedFlag) async {
+    if (db != null) {
+      try {
+        await db.close();
+      } catch (e) {
+        print('Error closing $dbName database: $e');
+      }
+    }
+    await connectMethod();
+    isConnectedFlag = true;
+    print('$dbName database reconnected successfully');
+  }
 }

@@ -336,6 +336,7 @@ class _HomepageState extends State<Homepage> {
                       description: beach.description,
                       rating: beach.rating,
                       category: 'beaches',
+                      reviews: beach.reviews,
                     ),
                   ),
                 );
@@ -403,6 +404,7 @@ class _HomepageState extends State<Homepage> {
                       rating: hotel.rating,
                       category: 'hotels',
                       city: hotel.city,
+                      reviews: hotel.reviews,
                     ),
                   ),
                 );
@@ -469,6 +471,7 @@ class _HomepageState extends State<Homepage> {
                       description: wild.description,
                       rating: wild.rating,
                       category: 'wildlife',
+                      reviews: wild.reviews,
                     ),
                   ),
                 );
@@ -535,6 +538,7 @@ class _HomepageState extends State<Homepage> {
                       description: entertainment.description,
                       rating: entertainment.rating,
                       category: 'entertainment',
+                      reviews: entertainment.reviews,
                     ),
                   ),
                 );
@@ -577,13 +581,14 @@ class _HomepageState extends State<Homepage> {
   }
 }
 
-class LocationDetailPage extends StatelessWidget {
+class LocationDetailPage extends StatefulWidget {
   final String name;
   final String? imageUrl;
   final String? description;
   final String? rating;
   final String? category;
   final String? city;
+  final List<Map<String, dynamic>>? reviews;
 
   const LocationDetailPage({
     super.key,
@@ -593,8 +598,14 @@ class LocationDetailPage extends StatelessWidget {
     this.rating,
     this.category,
     this.city,
+    this.reviews,
   });
 
+  @override
+  _LocationDetailPageState createState() => _LocationDetailPageState();
+}
+
+class _LocationDetailPageState extends State<LocationDetailPage> {
   Future<void> _launchURL(String url, BuildContext context) async {
     print('Attempting to launch URL: $url');
     if (await canLaunchUrl(Uri.parse(url))) {
@@ -618,8 +629,10 @@ class LocationDetailPage extends StatelessWidget {
   }
 
   String _getBookingUrl(String platform) {
-    final encodedName = Uri.encodeComponent(name);
-    final encodedCity = city != null && city!.isNotEmpty && city != name ? Uri.encodeComponent(city!) : 'Colombo';
+    final encodedName = Uri.encodeComponent(widget.name);
+    final encodedCity = widget.city != null && widget.city!.isNotEmpty && widget.city != widget.name
+        ? Uri.encodeComponent(widget.city!)
+        : 'Colombo';
     switch (platform.toLowerCase()) {
       case 'tripadvisor':
         return 'https://www.tripadvisor.com/Search?q=$encodedName%20$encodedCity';
@@ -633,227 +646,312 @@ class LocationDetailPage extends StatelessWidget {
   }
 
   Future<void> _copyToClipboard(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: name));
+    await Clipboard.setData(ClipboardData(text: widget.name));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied "$name" to clipboard')),
+      SnackBar(content: Text('Copied "${widget.name}" to clipboard')),
     );
   }
 
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          expandedHeight: 60.0, // Matches AppBar height
-          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-          flexibleSpace: FlexibleSpaceBar(
-            title: Text(
-              name,
-              style: const TextStyle(
-                color: Color.fromARGB(255, 255, 255, 255),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: CustomScrollView(
+        
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: 60.0,
+            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text(
+                widget.name,
+                style: const TextStyle(
+                  color: Color.fromARGB(255, 255, 255, 255),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
+              centerTitle: true,
+              titlePadding: const EdgeInsets.only(bottom: 10),
             ),
-            centerTitle: true,
-            titlePadding: const EdgeInsets.only(bottom: 10),
-          ),
-          leading: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              alignment: Alignment.center,
-              child: SvgPicture.asset(
-                'assets/icons/Arrow - Left 2.svg',
-                width: 20,
-                height: 20,
-              ),
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 240, 144, 9),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          actions: [
-            GestureDetector(
-              onTap: () {},
+            leading: GestureDetector(
+              onTap: () => Navigator.pop(context),
               child: Container(
                 margin: const EdgeInsets.all(10),
                 alignment: Alignment.center,
-                width: 30,
-                child: SvgPicture.asset('assets/icons/dots.svg'),
+                child: SvgPicture.asset(
+                  'assets/icons/Arrow - Left 2.svg',
+                  width: 20,
+                  height: 20,
+                ),
                 decoration: BoxDecoration(
                   color: const Color.fromARGB(255, 240, 144, 9),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
-          ],
-        ),
-        SliverToBoxAdapter(
-          child: imageUrl != null
-              ? Image.network(
-                  imageUrl!,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    print('Image load error for $imageUrl: $error');
-                    return Container(
-                      height: 200,
-                      width: double.infinity,
-                      color: Colors.grey[300],
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        size: 80,
-                        color: Colors.grey,
-                      ),
-                    );
-                  },
-                )
-              : Container(
-                  height: 200,
-                  width: double.infinity,
-                  color: Colors.grey[300],
-                  child: const Icon(
-                    Icons.image_not_supported,
-                    size: 80,
-                    color: Colors.grey,
-                  ),
-                ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 24, color: Colors.grey),
-                      tooltip: 'Copy name',
-                      onPressed: () => _copyToClipboard(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Rating: ${rating ?? 'N/A'}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color.fromARGB(221, 0, 192, 0),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  width: double.infinity,
+            actions: [
+              GestureDetector(
+                onTap: () {},
+                child: Container(
+                  margin: const EdgeInsets.all(10),
+                  alignment: Alignment.center,
+                  width: 30,
+                  child: SvgPicture.asset('assets/icons/dots.svg'),
                   decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 231, 169, 93),
+                    color: const Color.fromARGB(255, 240, 144, 9),
                     borderRadius: BorderRadius.circular(10),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.grey,
-                        spreadRadius: 2,
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
-                      )
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: widget.imageUrl != null
+                ? Image.network(
+                    widget.imageUrl!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      print('Image load error for ${widget.imageUrl}: $error');
+                      return Container(
+                        height: 200,
+                        width: double.infinity,
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          size: 80,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
+                  )
+                : Container(
+                    height: 200,
+                    width: double.infinity,
+                    color: Colors.grey[300],
+                    child: const Icon(
+                      Icons.image_not_supported,
+                      size: 80,
+                      color: Colors.grey,
+                    ),
+                  ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.name,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 24, color: Colors.grey),
+                        tooltip: 'Copy name',
+                        onPressed: () => _copyToClipboard(context),
+                      ),
                     ],
                   ),
-                  child: Text(
-                    description ?? 'No description available',
+                  const SizedBox(height: 8),
+                  Text(
+                    'Rating: ${widget.rating ?? 'N/A'}',
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.black87,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color.fromARGB(221, 0, 192, 0),
                     ),
                     textAlign: TextAlign.center,
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                if (category?.toLowerCase() == 'hotels') ...[
                   const SizedBox(height: 16),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () => _launchURL(_getBookingUrl('TripAdvisor'), context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          minimumSize: const Size(200, 48),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 231, 169, 93),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.grey,
+                          spreadRadius: 2,
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
                         ),
-                        child: const Text(
-                          'Book on TripAdvisor',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      ],
+                    ),
+                    child: Text(
+                      widget.description ?? 'No description available',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.black87,
                       ),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                        onPressed: () => _launchURL(_getBookingUrl('airbnb'), context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          minimumSize: const Size(200, 48),
-                        ),
-                        child: const Text(
-                          'Book on AirBnb',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                        onPressed: () => _launchURL(_getBookingUrl('Booking.com'), context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          minimumSize: const Size(200, 48),
-                        ),
-                        child: const Text(
-                          'Book on Booking.com',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                      textAlign: TextAlign.center,
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  if (widget.category?.toLowerCase() == 'hotels') ...[
+                    const SizedBox(height: 16),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _launchURL(_getBookingUrl('TripAdvisor'), context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            minimumSize: const Size(200, 48),
+                          ),
+                          child: const Text(
+                            'Book on TripAdvisor',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () => _launchURL(_getBookingUrl('airbnb'), context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            minimumSize: const Size(200, 48),
+                          ),
+                          child: const Text(
+                            'Book on AirBnb',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () => _launchURL(_getBookingUrl('Booking.com'), context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            minimumSize: const Size(200, 48),
+                          ),
+                          child: const Text(
+                            'Book on Booking.com',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Container(
+                    alignment: Alignment.centerLeft,
+                    child: const Text(
+                      'Most Recent TripAdvisor Reviews',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Color.fromARGB(255, 247, 183, 45),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (widget.reviews == null || widget.reviews!.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(8.0,0,8.0,0),
+                      child: Text('No reviews available.'),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(8.0,0,8.0,0),
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(255, 255, 255, 255),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.2),
+                            spreadRadius: 2,
+                            blurRadius: 5,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: widget.reviews!.length,
+                        itemBuilder: (context, index) {
+                          final review = widget.reviews![index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 6.0),
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Rating: ${review['rating'] ?? 'N/A'}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color.fromARGB(221, 0, 192, 0),
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.star,
+                                        color: Color.fromARGB(221, 255, 215, 0),
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    review['text'] ?? 'No review text',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      color: Colors.black87,
+                                    ),
+                                    // maxLines: 10,
+                                    // overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 }

@@ -8,6 +8,7 @@ class BeachLocationModel {
   String? rating;
   String? description;
   String? imageUrl;
+  List<Map<String, dynamic>>? reviews; // Added reviews field
 
   BeachLocationModel({
     required this.name,
@@ -15,6 +16,7 @@ class BeachLocationModel {
     this.rating,
     this.description,
     this.imageUrl,
+    this.reviews,
   });
 
   static Future<List<BeachLocationModel>> getBeachLocations() async {
@@ -67,17 +69,39 @@ class BeachLocationModel {
           if (photos.isNotEmpty && photos[0]['images']?['large']?['url'] != null) {
             beach.imageUrl = photos[0]['images']['large']['url'];
           } else {
-            beach.imageUrl = null; // No image available
+            beach.imageUrl = null;
           }
         } else {
           beach.imageUrl = null;
           print('Failed to load photos for ${beach.name}: ${photosResponse.statusCode}');
+        }
+
+        // Fetch location reviews
+        final reviewsUrl = '$baseUrl/location/${beach.locationId}/reviews?language=en&key=$apiKey';
+        final reviewsResponse = await http.get(
+          Uri.parse(reviewsUrl),
+          headers: {'accept': 'application/json'},
+        );
+
+        print('Reviews API Response Status for ${beach.name}: ${reviewsResponse.statusCode}');
+        print('Reviews API Response Body for ${beach.name}: ${reviewsResponse.body}');
+
+        if (reviewsResponse.statusCode == 200) {
+          final reviewsData = jsonDecode(reviewsResponse.body);
+          beach.reviews = (reviewsData['data'] as List?)?.map((review) => {
+            'text': review['text'] ?? 'No review text',
+            'rating': review['rating']?.toString() ?? 'N/A',
+          }).toList() ?? [];
+        } else {
+          beach.reviews = [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
+          print('Failed to load reviews for ${beach.name}: ${reviewsResponse.statusCode}');
         }
       } catch (e) {
         print('Error fetching data for ${beach.name}: $e');
         beach.rating = 'N/A';
         beach.description = 'Error loading data';
         beach.imageUrl = null;
+        beach.reviews = [{'text': 'Error loading reviews', 'rating': 'N/A'}];
       }
     }
 

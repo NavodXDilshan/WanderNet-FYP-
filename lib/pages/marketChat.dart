@@ -126,7 +126,7 @@ class _ChatWithSellerState extends State<ChatWithSeller> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Chat - ${widget.itemName}',
+          'Chat',
           style: const TextStyle(
             color: Colors.black,
             fontSize: 20,

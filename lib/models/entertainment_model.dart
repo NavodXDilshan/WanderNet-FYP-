@@ -8,6 +8,7 @@ class EntertainmentModel {
   String? rating;
   String? description;
   String? imageUrl;
+  List<Map<String, dynamic>>? reviews; // Added reviews field
 
   EntertainmentModel({
     required this.name,
@@ -15,6 +16,7 @@ class EntertainmentModel {
     this.rating,
     this.description,
     this.imageUrl,
+    this.reviews,
   });
 
   static Future<List<EntertainmentModel>> getEntertainmentLocations() async {
@@ -67,17 +69,39 @@ class EntertainmentModel {
           if (photos.isNotEmpty && photos[0]['images']?['large']?['url'] != null) {
             entertainment.imageUrl = photos[0]['images']['large']['url'];
           } else {
-            entertainment.imageUrl = null; // No image available
+            entertainment.imageUrl = null;
           }
         } else {
           entertainment.imageUrl = null;
           print('Failed to load photos for ${entertainment.name}: ${photosResponse.statusCode}');
+        }
+
+        // Fetch location reviews
+        final reviewsUrl = '$baseUrl/location/${entertainment.locationId}/reviews?language=en&key=$apiKey';
+        final reviewsResponse = await http.get(
+          Uri.parse(reviewsUrl),
+          headers: {'accept': 'application/json'},
+        );
+
+        print('Reviews API Response Status for ${entertainment.name}: ${reviewsResponse.statusCode}');
+        print('Reviews API Response Body for ${entertainment.name}: ${reviewsResponse.body}');
+
+        if (reviewsResponse.statusCode == 200) {
+          final reviewsData = jsonDecode(reviewsResponse.body);
+          entertainment.reviews = (reviewsData['data'] as List?)?.map((review) => {
+            'text': review['text'] ?? 'No review text',
+            'rating': review['rating']?.toString() ?? 'N/A',
+          }).toList() ?? [];
+        } else {
+          entertainment.reviews = [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
+          print('Failed to load reviews for ${entertainment.name}: ${reviewsResponse.statusCode}');
         }
       } catch (e) {
         print('Error fetching data for ${entertainment.name}: $e');
         entertainment.rating = 'N/A';
         entertainment.description = 'Error loading data';
         entertainment.imageUrl = null;
+        entertainment.reviews = [{'text': 'Error loading reviews', 'rating': 'N/A'}];
       }
     }
 

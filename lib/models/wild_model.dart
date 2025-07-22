@@ -8,6 +8,7 @@ class WildLocationModel {
   String? rating;
   String? description;
   String? imageUrl;
+  List<Map<String, dynamic>>? reviews; // Added reviews field
 
   WildLocationModel({
     required this.name,
@@ -15,10 +16,11 @@ class WildLocationModel {
     this.rating,
     this.description,
     this.imageUrl,
+    this.reviews,
   });
 
   static Future<List<WildLocationModel>> getWildLocation() async {
-    const apiKey = '5E6B8DAB15DD45B6BD299E1C50DE14C1'; 
+    const apiKey = '5E6B8DAB15DD45B6BD299E1C50DE14C1';
     const baseUrl = 'https://api.content.tripadvisor.com/api/v1';
 
     List<WildLocationModel> wildLocations = [
@@ -67,17 +69,39 @@ class WildLocationModel {
           if (photos.isNotEmpty && photos[0]['images']?['large']?['url'] != null) {
             wild.imageUrl = photos[0]['images']['large']['url'];
           } else {
-            wild.imageUrl = null; // No image available
+            wild.imageUrl = null;
           }
         } else {
           wild.imageUrl = null;
           print('Failed to load photos for ${wild.name}: ${photosResponse.statusCode}');
+        }
+
+        // Fetch location reviews
+        final reviewsUrl = '$baseUrl/location/${wild.locationId}/reviews?language=en&key=$apiKey';
+        final reviewsResponse = await http.get(
+          Uri.parse(reviewsUrl),
+          headers: {'accept': 'application/json'},
+        );
+
+        print('Reviews API Response Status for ${wild.name}: ${reviewsResponse.statusCode}');
+        print('Reviews API Response Body for ${wild.name}: ${reviewsResponse.body}');
+
+        if (reviewsResponse.statusCode == 200) {
+          final reviewsData = jsonDecode(reviewsResponse.body);
+          wild.reviews = (reviewsData['data'] as List?)?.map((review) => {
+            'text': review['text'] ?? 'No review text',
+            'rating': review['rating']?.toString() ?? 'N/A',
+          }).toList() ?? [];
+        } else {
+          wild.reviews = [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
+          print('Failed to load reviews for ${wild.name}: ${reviewsResponse.statusCode}');
         }
       } catch (e) {
         print('Error fetching data for ${wild.name}: $e');
         wild.rating = 'N/A';
         wild.description = 'Error loading data';
         wild.imageUrl = null;
+        wild.reviews = [{'text': 'Error loading reviews', 'rating': 'N/A'}];
       }
     }
 

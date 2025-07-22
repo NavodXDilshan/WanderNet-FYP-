@@ -152,9 +152,9 @@ class MarketItemDetailPage extends StatelessWidget {
             imageUrl != null
                 ? Image.network(
                     imageUrl!,
-                    height: 200,
+                    // height: 200,
                     width: double.infinity,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) => Container(
                       height: 200,
                       width: double.infinity,
@@ -238,7 +238,7 @@ class MarketItemDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    price,
+                   "LKR ${price}",
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

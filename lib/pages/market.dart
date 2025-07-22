@@ -11,6 +11,9 @@ import 'marketItemPage.dart';
 import 'marketChat.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'dart:developer' as developer;
 
 class AuthService {
   static final SupabaseClient supabase = Supabase.instance.client;
@@ -275,7 +278,6 @@ class _MarketState extends State<Market> {
         child: Container(
           margin: const EdgeInsets.all(10),
           alignment: Alignment.center,
-
           decoration: BoxDecoration(
             color: const Color.fromARGB(255, 240, 144, 9),
             borderRadius: BorderRadius.circular(10),
@@ -336,7 +338,6 @@ class _MarketState extends State<Market> {
                 endIndent: 10,
                 thickness: 0.1,
               ),
-
             ],
           ),
           border: OutlineInputBorder(
@@ -393,7 +394,6 @@ class _MarketState extends State<Market> {
                         category.iconPath,
                         width: 24,
                         height: 24,
-                       
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -427,7 +427,7 @@ class _MarketState extends State<Market> {
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.75,
+        childAspectRatio: 0.75, // Adjusted to better fit content with image
       ),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
@@ -454,80 +454,85 @@ class _MarketState extends State<Market> {
                 ),
               );
             },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                item.imageUrl != null && item.imageUrl!.isNotEmpty
-                    ? Image.network(
-                        item.imageUrl!,
-                        height: 120,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          print('Image load error for ${item.imageUrl}: $error');
-                          return Container(
-                            height: 120,
+            child: ConstrainedBox( // Added to prevent overflow
+              constraints: const BoxConstraints(
+                maxHeight: 250, // Set a max height to prevent overflow
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 120, // Fixed height for image
+                    width: double.infinity,
+                    child: item.imageUrl != null && item.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            item.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              print('Image load error for ${item.imageUrl}: $error');
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  size: 50,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
                             color: Colors.grey[300],
                             child: const Icon(
                               Icons.image_not_supported,
                               size: 50,
                               color: Colors.grey,
                             ),
-                          );
-                        },
-                      )
-                    : Container(
-                        height: 120,
-                        color: Colors.grey[300],
-                        child: const Icon(
-                          Icons.image_not_supported,
-                          size: 50,
-                          color: Colors.grey,
-                        ),
-                      ),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.price,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'By: ${item.username}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.category,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
+                          ),
                   ),
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "LKR ${item.price}",
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Text(
+                        //   'By: ${item.username}',
+                        //   style: const TextStyle(
+                        //     fontSize: 12,
+                        //     color: Colors.grey,
+                        //   ),
+                        // ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.category,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -716,7 +721,6 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _imageUrlController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   String selectedCategory = 'Electronics';
   LatLng? _selectedLocation;
@@ -729,6 +733,9 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
   );
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
   Set<Marker> _markers = {};
+  final ImagePicker _picker = ImagePicker();
+  File? _selectedImage;
+  bool _isUploadingImage = false;
 
   @override
   void initState() {
@@ -849,34 +856,205 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
     }
   }
 
-  @override
+  Future<void> _pickImage() async {
+    try {
+      showModalBottomSheet(
+        context: context,
+        builder: (BuildContext context) {
+          return SafeArea(
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: const Text('Camera'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _getImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: const Text('Gallery'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _getImage(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening image picker: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _getImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _uploadImage(File image) async {
+    try {
+      setState(() {
+        _isUploadingImage = true;
+      });
+
+      // Replace with your backend URL
+      const String backendUrl = 'http://192.168.1.3:3000'; // Update this
+      
+      // First, prepare the upload
+      final prepareResponse = await http.post(
+        Uri.parse('$backendUrl/api/prepare-upload'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'files': [
+            {
+              'name': image.path.split('/').last,
+              'size': await image.length(),
+              'customId': null,
+            }
+          ],
+          'routeConfig': ['image'], 
+          'metadata': null,
+          'callbackUrl': 'http://example.com/callback', 
+          'callbackSlug': 'upload-callback', 
+        }),
+      );
+
+      if (prepareResponse.statusCode != 200) {
+        throw Exception('Failed to prepare upload: ${prepareResponse.body}');
+      }
+
+      final prepareData = jsonDecode(prepareResponse.body);
+      
+      // Add null checks and better error handling
+      if (prepareData[0] == null || prepareData[0].isEmpty) {
+        throw Exception('Invalid response from upload service');
+      }
+
+      final uploadData = prepareData[0];
+      
+      // Validate required fields
+      if (uploadData['url'] == null) {
+        throw Exception('Upload URL not provided');
+      }
+
+      // Upload the file to UploadThing
+      final uploadRequest = http.MultipartRequest('POST', Uri.parse(uploadData['url']));
+
+      // Handle form fields properly - check if it's a Map or List
+      if (uploadData['fields'] != null) {
+        final fields = uploadData['fields'];
+        developer.log('Upload fields: $fields');
+
+        if (fields is Map<String, dynamic>) {
+          // If it's a Map, iterate over entries
+          fields.forEach((key, value) {
+            uploadRequest.fields[key] = value.toString();
+          });
+        } else if (fields is List) {
+          // If it's a List, handle accordingly
+          for (var field in fields) {
+            if (field is Map<String, dynamic>) {
+              field.forEach((key, value) {
+                uploadRequest.fields[key] = value.toString();
+              });
+            }
+          }
+        }
+      }
+      
+      // Add the file
+      uploadRequest.files.add(
+        await http.MultipartFile.fromPath('file', image.path),
+      );
+
+      final uploadResponse = await uploadRequest.send();
+      final responseBody = await uploadResponse.stream.bytesToString();
+      
+      print('Upload response status: ${uploadResponse.statusCode}');
+      print('Upload response body: $responseBody');
+      
+      if (uploadResponse.statusCode == 200 || uploadResponse.statusCode == 201 || uploadResponse.statusCode == 204) {
+        return uploadData['fileUrl']; // Return the URL directly from uploadData
+      } else {
+        throw Exception('Upload failed with status ${uploadResponse.statusCode}: $responseBody');
+      }
+    } catch (e) {
+      print('Upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image upload failed: $e')),
+        );
+      }
+      return null;
+    } finally {
+      setState(() {
+        _isUploadingImage = false;
+      });
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
+    });
+  }
+
+@override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add New Market Item'),
+      title: const Text(
+        'Add New Market Item',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Color.fromARGB(255, 204, 104, 4),
+        ),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Item Name'),
-            ),
-            TextField(
-              controller: _priceController,
-              decoration: const InputDecoration(labelText: 'Price'),
-            ),
-            TextField(
-              controller: _imageUrlController,
-              decoration: const InputDecoration(labelText: 'Image URL (optional)'),
-            ),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(labelText: 'Description (optional)'),
-              maxLines: 3,
-            ),
+            _buildTextField(_nameController, 'Item Name'),
+            const SizedBox(height: 16),
+            _buildTextField(_priceController, 'Price'),
+            const SizedBox(height: 16),
+            _buildTextField(_descriptionController, 'Description (optional)', maxLines: 3),
+            const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: selectedCategory,
-              decoration: const InputDecoration(labelText: 'Category'),
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+              ),
               items: MarketCategory.getCategories()
                   .where((cat) => cat.name != 'All')
                   .map((cat) => DropdownMenuItem(
@@ -890,22 +1068,47 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
                 });
               },
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search for a location (e.g., Colombo, LK)',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: _addMarkerFromSearch,
-                ),
-                border: const OutlineInputBorder(),
-                filled: true,
-                fillColor: Colors.white,
+            const SizedBox(height: 16),
+            Card(
+              color: Colors.white,
+              child: ListTile(
+                leading: const Icon(Icons.photo),
+                title: Text(_selectedImage != null ? 'Image selected' : 'Add photo'),
+                subtitle: _selectedImage != null ? const Text('Tap to change image') : null,
+                trailing: _selectedImage != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: _removeImage,
+                      )
+                    : null,
+                onTap: _pickImage,
               ),
-              onSubmitted: (_) => _addMarkerFromSearch(),
             ),
-            const SizedBox(height: 10),
+            if (_selectedImage != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                height: 200,
+                width: double.infinity,
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    _selectedImage!,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            _buildTextField(_searchController, 'Search for a location (e.g., Colombo, LK)', suffixIcon: IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: _addMarkerFromSearch,
+            )),
+            const SizedBox(height: 16),
             SizedBox(
               height: 200,
               child: GoogleMap(
@@ -938,7 +1141,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
             ),
             if (!_isLocationPermissionGranted)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+                padding: const EdgeInsets.only(top: 16.0),
                 child: ElevatedButton(
                   onPressed: _checkAndRequestLocationPermission,
                   child: const Text('Enable Location'),
@@ -953,7 +1156,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () async {
+          onPressed: _isUploadingImage ? null : () async {
             if (_nameController.text.isEmpty || _priceController.text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Item name and price are required')),
@@ -967,10 +1170,20 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignInPage()));
               return;
             }
+            String? imageUrl;
+            if (_selectedImage != null) {
+              imageUrl = await _uploadImage(_selectedImage!);
+              if (imageUrl == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Image upload failed. Please try again.")),
+                );
+                return;
+              }
+            }
             final newItem = MarketItemModel(
               name: _nameController.text,
               price: _priceController.text,
-              imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
+              imageUrl: imageUrl,
               description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
               username: widget.username,
               userEmail: widget.userEmail,
@@ -989,9 +1202,35 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               );
             }
           },
-          child: const Text('Add'),
+          child: _isUploadingImage
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Text('Add'),
         ),
       ],
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String labelText, {int maxLines = 1, Widget? suffixIcon}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: labelText,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        suffixIcon: suffixIcon,
+      ),
+      maxLines: maxLines,
+      onSubmitted: labelText.contains('location') ? (_) => _addMarkerFromSearch() : null,
     );
   }
 
@@ -1001,7 +1240,6 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
     _nameController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
-    _imageUrlController.dispose();
     _searchController.dispose();
     super.dispose();
   }
