@@ -28,4 +28,29 @@ class ApiService {
       throw Exception('Error fetching posts: $e');
     }
   }
+
+  static Future<List<Map<String, dynamic>>> getCommentedLocations(String username) async {
+    try {
+      // URL encode the username to handle spaces and special characters
+      final encodedUsername = Uri.encodeComponent(username);
+      final url = Uri.parse('$baseUrl/locations/commented?username="$encodedUsername"');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = json.decode(response.body);
+        print(response.body);
+        return jsonData.cast<Map<String, dynamic>>();
+      } else {
+        throw Exception('Failed to load locations: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching locations: $e');
+    }
+  }
 }

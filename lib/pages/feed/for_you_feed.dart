@@ -3,6 +3,9 @@ import 'package:app/models/post_model.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/aiHelper/flask.dart';
+import 'package:app/models/location_model.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ForYouFeed extends StatefulWidget {
   final String currentUserId;
@@ -26,39 +29,38 @@ class _ForYouFeedState extends State<ForYouFeed>
   bool get wantKeepAlive => true;
 
   // Sample locations data - replace with your actual data source
-  final List<Map<String, String>> locations = [
-    {
-      'name': 'New York',
-      'image': 'assets/images/locations/new_york.jpg',
-    },
-    {
-      'name': 'London',
-      'image': 'assets/images/locations/london.jpg',
-    },
-    {
-      'name': 'Tokyo',
-      'image': 'assets/images/locations/tokyo.jpg',
-    },
-    {
-      'name': 'Paris',
-      'image': 'assets/images/locations/paris.jpg',
-    },
-    {
-      'name': 'Sydney',
-      'image': 'assets/images/locations/sydney.jpg',
-    },
-    {
-      'name': 'Dubai',
-      'image': 'assets/images/locations/dubai.jpg',
-    },
-  ];
+  List<LocationModel>? locations;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTrendingLocations();
+  }
+
+  Future<void> _fetchTrendingLocations() async {
+    try {
+      final List<Map<String, dynamic>> locationData =
+          await ApiService.getCommentedLocations(widget.username);
+      setState(() {
+        locations = locationData.map((data) {
+          return LocationModel(
+            location: data['location'] ?? 'Unknown',
+            latitude: data['latitude'],
+            longitude: data['longitude'],
+          );
+        }).toList();
+      });
+    } catch (e) {
+      print('Error fetching locations: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return RefreshIndicator(
       onRefresh: () async {
-        setState(() {}); // Rebuild FutureBuilder
+        setState(() { _fetchTrendingLocations();}); // Rebuild FutureBuilder
       },
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: ApiService.getCommentedPosts(widget.username), // You might want to create fetchForYouPosts() for different algorithm
@@ -173,27 +175,44 @@ class _ForYouFeedState extends State<ForYouFeed>
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: locations.length,
+              itemCount: locations?.length,
               itemBuilder: (context, index) {
-                final location = locations[index];
-                return _buildLocationItem(location);
+                final location = locations?[index];
+                return _buildLocationItem(location != null
+                    ? {
+                        'location': location.location,
+                        'latitude': location.latitude.toString(),
+                        'longitude': location.longitude.toString(),
+                      }
+                    : {'location': 'Unknown', 'latitude': '0.0', 'longitude': '0.0'});
               },
             ),
           ),
         ],
+        
       ),
     );
+  }
+
+   // Add this helper method to the PostCard class
+  void _openInMaps(String location, double latitude, double longitude) async {
+    final url = 'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      throw 'Could not launch $url';
+    }
   }
 
   Widget _buildLocationItem(Map<String, String> location) {
     return GestureDetector(
       onTap: () {
-        // Handle location tap - navigate to location-specific feed
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Showing posts from ${location['name']}'),
-            duration: const Duration(seconds: 2),
-          ),
+        // Launch longitude and latitude in Google Maps or any other action
+        _openInMaps(
+          location['location'] ?? 'Unknown',
+          double.tryParse(location['latitude'] ?? '0.0') ?? 0.0,
+          double.tryParse(location['longitude'] ?? '0.0') ?? 0.0,
         );
       },
       child: Container(
@@ -213,27 +232,10 @@ class _ForYouFeedState extends State<ForYouFeed>
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
-                child: Image.asset(
-                  location['image']!,
-                  width: 56,
-                  height: 56,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Fallback to a placeholder if image doesn't exist
-                    return Container(
-                      width: 56,
-                      height: 56,
-                      decoration: const BoxDecoration(
-                        color: Color.fromARGB(255, 240, 144, 9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.location_on,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    );
-                  },
+                child: Icon(
+                  Icons.location_on,
+                  color: Colors.orange,
+                  size: 30,
                 ),
               ),
             ),
@@ -241,7 +243,7 @@ class _ForYouFeedState extends State<ForYouFeed>
             SizedBox(
               width: 70,
               child: Text(
-                location['name']!,
+                location['location'] ?? 'Unknown',
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
