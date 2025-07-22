@@ -47,3 +47,4 @@ app.*.map.json
 # Backend related
 /lib/backend/node_modules/
 /lib/backend/.env
+/lib/backend/ai/.venv/
