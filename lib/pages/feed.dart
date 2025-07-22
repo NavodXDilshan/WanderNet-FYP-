@@ -5,7 +5,37 @@ import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/pages/create_post.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+class AuthService {
+  static final SupabaseClient supabase = Supabase.instance.client;
+
+  static Future<Map<String, String?>> getUserInfo() async {
+    final user = supabase.auth.currentUser;
+    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
+    if (user == null) {
+      print('No authenticated user found');
+      return {'userEmail': null, 'username': null, 'userId': null};
+    }
+    try {
+      if (supabase.auth.currentSession?.isExpired ?? true) {
+        await supabase.auth.refreshSession();
+      }
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
+        'userId': user.id,
+      };
+    } catch (e) {
+      print('Error refreshing session or fetching user info: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? user.email ?? 'Guest',
+        'userId': user.id,
+      };
+    }
+  }
+}
 
 class Feed extends StatefulWidget {
   const Feed({super.key});
@@ -16,8 +46,22 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final String currentUserId = 'navod_dilshan';
-  final String userEmail = 'k.m.navoddilshan@gmail.com';
+  String? currentUserId;
+  String? userEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      userEmail = userInfo['userEmail'];
+      currentUserId = userInfo['userId'];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,8 +133,8 @@ class _FeedState extends State<Feed> {
                     );
                     return PostCard(
                       post: post,
-                      currentUserId: currentUserId,
-                      userEmail: userEmail,
+                      currentUserId: currentUserId ?? '',
+                      userEmail: userEmail ?? '',
                       onInteraction: () {
                         setState(() {}); // Refresh the feed when needed
                       },
@@ -208,7 +252,6 @@ class _FeedState extends State<Feed> {
       ],
     );
   }
-
 
   Widget _buildLoadingSkeleton() {
     return ListView.builder(

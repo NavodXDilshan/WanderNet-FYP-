@@ -761,7 +761,7 @@ class PlannerState extends State<Planner> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search for new places to add to wishlist',
+                hintText: 'Add to wishlist',
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.search),
                   onPressed: _addMarkerFromSearch,
@@ -809,8 +809,8 @@ class PlannerState extends State<Planner> {
   AppBar appBar() {
     return AppBar(
       title: Text(
-        'Plan Your Tour - ${username ?? 'Guest'}',
-        style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+        'Plan Your Tour',
+        style: const TextStyle(color: Color.fromARGB(255, 250, 250, 250), fontSize: 18, fontWeight: FontWeight.bold),
       ),
       backgroundColor: const Color.fromARGB(255, 240, 144, 9),
       centerTitle: true,
