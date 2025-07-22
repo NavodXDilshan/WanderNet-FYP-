@@ -1,12 +1,17 @@
 import 'package:app/models/category_model.dart';
 import 'package:app/models/beach_model.dart';
 import 'package:app/models/hotel_model.dart';
+import 'package:app/models/searchLocationModel.dart';
 import 'package:app/models/wild_model.dart';
 import 'package:app/models/entertainment_model.dart';
+import 'package:app/pages/SearchLocationDetailPage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -21,13 +26,23 @@ class _HomepageState extends State<Homepage> {
   List<HotelLocationModel> hotels = [];
   List<WildLocationModel> wildLocations = [];
   List<EntertainmentModel> entertainmentLocations = [];
+  List<SearchLocationModel> searchResults = [];
   String? selectedCategory;
   bool isLoading = false;
+  final TextEditingController _searchController = TextEditingController();
+  bool isSearching = false;
 
   @override
   void initState() {
     super.initState();
     _getCategories();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _getCategories() {
@@ -95,9 +110,62 @@ class _HomepageState extends State<Homepage> {
     });
   }
 
+  Future<void> _searchLocations(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        searchResults = [];
+        isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      isSearching = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+          'https://api.content.tripadvisor.com/api/v1/location/search?key=5E6B8DAB15DD45B6BD299E1C50DE14C1&searchQuery=${Uri.encodeComponent(query)}&language=en',
+        ),
+        headers: {'accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final results = (data['data'] as List)
+            .map((item) => SearchLocationModel.fromJson({
+                  'name': item['name'] ?? 'Unknown',
+                  'locationId': item['location_id']?.toString() ?? '',
+                  'rating': item['rating']?.toString() ?? 'N/A',
+                  'description': item['description'] ?? 'No description available',
+                }))
+            .toList();
+        setState(() {
+          searchResults = results;
+          isSearching = false;
+        });
+      } else {
+        print('Search failed with status: ${response.statusCode} - ${response.body}');
+        setState(() {
+          searchResults = [];
+          isSearching = false;
+        });
+      }
+    } catch (e) {
+      print('Error searching locations: $e');
+      setState(() {
+        searchResults = [];
+        isSearching = false;
+      });
+    }
+  }
+
   void _onCategorySelected(String categoryName) {
     setState(() {
       selectedCategory = categoryName;
+      searchResults = [];
+      _searchController.clear();
     });
     switch (categoryName.toLowerCase()) {
       case 'beaches':
@@ -115,6 +183,17 @@ class _HomepageState extends State<Homepage> {
     }
   }
 
+  void _onSearchChanged() {
+    final query = _searchController.text.trim();
+    if (query.length > 2) {
+      _searchLocations(query);
+    } else if (query.isEmpty) {
+      setState(() {
+        searchResults = [];
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,19 +206,21 @@ class _HomepageState extends State<Homepage> {
           const SizedBox(height: 40),
           _categoriesSection(),
           Expanded(
-            child: isLoading
+            child: isLoading || isSearching
                 ? _loadingIndicator()
-                : selectedCategory == null
-                    ? const Center(child: Text('Select a category to view locations.'))
-                    : selectedCategory!.toLowerCase() == 'beaches'
-                        ? _beachListSection()
-                        : selectedCategory!.toLowerCase() == 'hotels'
-                            ? _hotelListSection()
-                            : selectedCategory!.toLowerCase() == 'wildlife'
-                                ? _wildListSection()
-                                : selectedCategory!.toLowerCase() == 'entertainment'
-                                    ? _entertainmentListSection()
-                                    : const Center(child: Text('Select a category to view locations.')),
+                : selectedCategory == null && searchResults.isEmpty
+                    ? const Center(child: Text('Select a category or search for locations.'))
+                    : searchResults.isNotEmpty
+                        ? _searchResultsSection()
+                        : selectedCategory!.toLowerCase() == 'beaches'
+                            ? _beachListSection()
+                            : selectedCategory!.toLowerCase() == 'hotels'
+                                ? _hotelListSection()
+                                : selectedCategory!.toLowerCase() == 'wildlife'
+                                    ? _wildListSection()
+                                    : selectedCategory!.toLowerCase() == 'entertainment'
+                                        ? _entertainmentListSection()
+                                        : const Center(child: Text('Select a category to view locations.')),
           ),
         ],
       ),
@@ -201,6 +282,7 @@ class _HomepageState extends State<Homepage> {
         ],
       ),
       child: TextField(
+        controller: _searchController,
         decoration: InputDecoration(
           filled: true,
           fillColor: const Color.fromARGB(255, 255, 255, 255),
@@ -579,6 +661,56 @@ class _HomepageState extends State<Homepage> {
       ),
     );
   }
+
+  Widget _searchResultsSection() {
+    if (searchResults.isEmpty) {
+      return const Center(child: Text('No results found.'));
+    }
+    return SizedBox(
+      height: 400,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: searchResults.length,
+        itemBuilder: (context, index) {
+          final result = searchResults[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            elevation: 2,
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SearchLocationDetailPage(location: result),
+                  ),
+                );
+              },
+              leading: const Icon(
+                Icons.location_on,
+                size: 40,
+                color: Colors.grey,
+              ),
+              title: Text(
+                result.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rating: ${result.rating ?? 'N/A'}'),
+                  Text(
+                    result.description ?? 'No description available',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class LocationDetailPage extends StatefulWidget {
@@ -657,7 +789,6 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
-        
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -878,12 +1009,12 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
                   const SizedBox(height: 10),
                   if (widget.reviews == null || widget.reviews!.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.fromLTRB(8.0,0,8.0,0),
+                      padding: EdgeInsets.fromLTRB(8.0, 0, 8.0, 0),
                       child: Text('No reviews available.'),
                     )
                   else
                     Container(
-                      padding: const EdgeInsets.fromLTRB(8.0,0,8.0,0),
+                      padding: const EdgeInsets.fromLTRB(8.0, 0, 8.0, 0),
                       decoration: BoxDecoration(
                         color: const Color.fromARGB(255, 255, 255, 255),
                         borderRadius: BorderRadius.circular(10),
@@ -936,8 +1067,6 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
                                       fontWeight: FontWeight.w400,
                                       color: Colors.black87,
                                     ),
-                                    // maxLines: 10,
-                                    // overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
