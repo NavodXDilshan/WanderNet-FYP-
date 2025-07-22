@@ -603,7 +603,7 @@ class PostCard extends StatelessWidget {
                                             'userName': 'Navod Dilshan',
                                             'content': commentText,
                                             'createdAt': DateTime.now().toIso8601String(),
-                                        });
+                                        }); 
                                         post.comments++;
                                         commentController.clear();
                                         setCardState(() {
