@@ -11,7 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import '../models/prmotion_model.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -27,6 +27,7 @@ class _HomepageState extends State<Homepage> {
   List<WildLocationModel> wildLocations = [];
   List<EntertainmentModel> entertainmentLocations = [];
   List<SearchLocationModel> searchResults = [];
+  List<PromotionModel> promotions = [];
   String? selectedCategory;
   bool isLoading = false;
   final TextEditingController _searchController = TextEditingController();
@@ -36,6 +37,7 @@ class _HomepageState extends State<Homepage> {
   void initState() {
     super.initState();
     _getCategories();
+    getPromotions();
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -47,6 +49,10 @@ class _HomepageState extends State<Homepage> {
 
   void _getCategories() {
     categories = CategoryModel.getCategories();
+  }
+
+  void getPromotions() {
+    promotions = PromotionModel.getPromotions();
   }
 
   Future<void> _getBeaches() async {
@@ -197,19 +203,28 @@ class _HomepageState extends State<Homepage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false, // Prevents scaffold resizing with keyboard
       appBar: _appBar(),
       backgroundColor: Colors.white,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _searchField(),
-          const SizedBox(height: 40),
-          _categoriesSection(),
-          Expanded(
-            child: isLoading || isSearching
+      body: SingleChildScrollView( // Makes the entire content vertically scrollable
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _promotionsSection(),
+            _searchField(),
+            const SizedBox(height: 40),
+            _categoriesSection(),
+            // Remove fixed height, let the content determine the size
+            isLoading || isSearching
                 ? _loadingIndicator()
                 : selectedCategory == null && searchResults.isEmpty
-                    ? const Center(child: Text('Select a category or search for locations.'))
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 50), // adds 20px of space above
+                          child: Center(
+                            child: Text('Select a category or search for locations.'),
+                                        ),
+                                )
+
                     : searchResults.isNotEmpty
                         ? _searchResultsSection()
                         : selectedCategory!.toLowerCase() == 'beaches'
@@ -221,8 +236,8 @@ class _HomepageState extends State<Homepage> {
                                     : selectedCategory!.toLowerCase() == 'entertainment'
                                         ? _entertainmentListSection()
                                         : const Center(child: Text('Select a category to view locations.')),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -231,26 +246,10 @@ class _HomepageState extends State<Homepage> {
     return AppBar(
       title: const Text(
         'HomePage',
-        style: TextStyle(color: Colors.black, fontSize: 20),
+        style: TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontSize: 20),
       ),
       centerTitle: true,
-      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-      leading: GestureDetector(
-        onTap: () {},
-        child: Container(
-          margin: const EdgeInsets.all(10),
-          alignment: Alignment.center,
-          child: SvgPicture.asset(
-            'assets/icons/Arrow - Left 2.svg',
-            width: 20,
-            height: 20,
-          ),
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 240, 144, 9),
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      ),
+      backgroundColor: const Color.fromRGBO(240, 144, 9, 1),
       actions: [
         GestureDetector(
           onTap: () {},
@@ -397,66 +396,65 @@ class _HomepageState extends State<Homepage> {
     if (beaches.isEmpty) {
       return const Center(child: Text('No beaches found.'));
     }
-    return SizedBox(
-      height: 400,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: beaches.length,
-        itemBuilder: (context, index) {
-          final beach = beaches[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LocationDetailPage(
-                      name: beach.name,
-                      imageUrl: beach.imageUrl,
-                      description: beach.description,
-                      rating: beach.rating,
-                      category: 'beaches',
-                      reviews: beach.reviews,
-                    ),
+    return ListView.builder(
+      shrinkWrap: true, // Allows the ListView to take only the space it needs
+      physics: const NeverScrollableScrollPhysics(), // Prevents inner scrolling
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: beaches.length,
+      itemBuilder: (context, index) {
+        final beach = beaches[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 2,
+          child: ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LocationDetailPage(
+                    name: beach.name,
+                    imageUrl: beach.imageUrl,
+                    description: beach.description,
+                    rating: beach.rating,
+                    category: 'beaches',
+                    reviews: beach.reviews,
                   ),
-                );
-              },
-              leading: beach.imageUrl != null
-                  ? Image.network(
-                      beach.imageUrl!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.image_not_supported,
-                        size: 40,
-                      ),
-                    )
-                  : const Icon(
+                ),
+              );
+            },
+            leading: beach.imageUrl != null
+                ? Image.network(
+                    beach.imageUrl!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-              title: Text(
-                beach.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rating: ${beach.rating ?? 'N/A'}'),
-                  Text(
-                    beach.description ?? 'No description available',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  )
+                : const Icon(
+                    Icons.image_not_supported,
+                    size: 40,
                   ),
-                ],
-              ),
+            title: Text(
+              beach.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        },
-      ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rating: ${beach.rating ?? 'N/A'}'),
+                Text(
+                  beach.description ?? 'No description available',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -464,67 +462,66 @@ class _HomepageState extends State<Homepage> {
     if (hotels.isEmpty) {
       return const Center(child: Text('No hotels found.'));
     }
-    return SizedBox(
-      height: 400,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: hotels.length,
-        itemBuilder: (context, index) {
-          final hotel = hotels[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LocationDetailPage(
-                      name: hotel.name,
-                      imageUrl: hotel.imageUrl,
-                      description: hotel.description,
-                      rating: hotel.rating,
-                      category: 'hotels',
-                      city: hotel.city,
-                      reviews: hotel.reviews,
-                    ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: hotels.length,
+      itemBuilder: (context, index) {
+        final hotel = hotels[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 2,
+          child: ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LocationDetailPage(
+                    name: hotel.name,
+                    imageUrl: hotel.imageUrl,
+                    description: hotel.description,
+                    rating: hotel.rating,
+                    category: 'hotels',
+                    city: hotel.city,
+                    reviews: hotel.reviews,
                   ),
-                );
-              },
-              leading: hotel.imageUrl != null
-                  ? Image.network(
-                      hotel.imageUrl!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.image_not_supported,
-                        size: 40,
-                      ),
-                    )
-                  : const Icon(
+                ),
+              );
+            },
+            leading: hotel.imageUrl != null
+                ? Image.network(
+                    hotel.imageUrl!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-              title: Text(
-                hotel.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rating: ${hotel.rating ?? 'N/A'}'),
-                  Text(
-                    hotel.description ?? 'No description available',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  )
+                : const Icon(
+                    Icons.image_not_supported,
+                    size: 40,
                   ),
-                ],
-              ),
+            title: Text(
+              hotel.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        },
-      ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rating: ${hotel.rating ?? 'N/A'}'),
+                Text(
+                  hotel.description ?? 'No description available',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -532,66 +529,65 @@ class _HomepageState extends State<Homepage> {
     if (wildLocations.isEmpty) {
       return const Center(child: Text('No wildlife locations found.'));
     }
-    return SizedBox(
-      height: 400,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: wildLocations.length,
-        itemBuilder: (context, index) {
-          final wild = wildLocations[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LocationDetailPage(
-                      name: wild.name,
-                      imageUrl: wild.imageUrl,
-                      description: wild.description,
-                      rating: wild.rating,
-                      category: 'wildlife',
-                      reviews: wild.reviews,
-                    ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: wildLocations.length,
+      itemBuilder: (context, index) {
+        final wild = wildLocations[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 2,
+          child: ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LocationDetailPage(
+                    name: wild.name,
+                    imageUrl: wild.imageUrl,
+                    description: wild.description,
+                    rating: wild.rating,
+                    category: 'wildlife',
+                    reviews: wild.reviews,
                   ),
-                );
-              },
-              leading: wild.imageUrl != null
-                  ? Image.network(
-                      wild.imageUrl!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.image_not_supported,
-                        size: 40,
-                      ),
-                    )
-                  : const Icon(
+                ),
+              );
+            },
+            leading: wild.imageUrl != null
+                ? Image.network(
+                    wild.imageUrl!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-              title: Text(
-                wild.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rating: ${wild.rating ?? 'N/A'}'),
-                  Text(
-                    wild.description ?? 'No description available',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  )
+                : const Icon(
+                    Icons.image_not_supported,
+                    size: 40,
                   ),
-                ],
-              ),
+            title: Text(
+              wild.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        },
-      ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rating: ${wild.rating ?? 'N/A'}'),
+                Text(
+                  wild.description ?? 'No description available',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -599,66 +595,65 @@ class _HomepageState extends State<Homepage> {
     if (entertainmentLocations.isEmpty) {
       return const Center(child: Text('No entertainment locations found.'));
     }
-    return SizedBox(
-      height: 400,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: entertainmentLocations.length,
-        itemBuilder: (context, index) {
-          final entertainment = entertainmentLocations[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LocationDetailPage(
-                      name: entertainment.name,
-                      imageUrl: entertainment.imageUrl,
-                      description: entertainment.description,
-                      rating: entertainment.rating,
-                      category: 'entertainment',
-                      reviews: entertainment.reviews,
-                    ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: entertainmentLocations.length,
+      itemBuilder: (context, index) {
+        final entertainment = entertainmentLocations[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 2,
+          child: ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LocationDetailPage(
+                    name: entertainment.name,
+                    imageUrl: entertainment.imageUrl,
+                    description: entertainment.description,
+                    rating: entertainment.rating,
+                    category: 'entertainment',
+                    reviews: entertainment.reviews,
                   ),
-                );
-              },
-              leading: entertainment.imageUrl != null
-                  ? Image.network(
-                      entertainment.imageUrl!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.image_not_supported,
-                        size: 40,
-                      ),
-                    )
-                  : const Icon(
+                ),
+              );
+            },
+            leading: entertainment.imageUrl != null
+                ? Image.network(
+                    entertainment.imageUrl!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.image_not_supported,
                       size: 40,
                     ),
-              title: Text(
-                entertainment.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rating: ${entertainment.rating ?? 'N/A'}'),
-                  Text(
-                    entertainment.description ?? 'No description available',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  )
+                : const Icon(
+                    Icons.image_not_supported,
+                    size: 40,
                   ),
-                ],
-              ),
+            title: Text(
+              entertainment.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        },
-      ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rating: ${entertainment.rating ?? 'N/A'}'),
+                Text(
+                  entertainment.description ?? 'No description available',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -666,49 +661,112 @@ class _HomepageState extends State<Homepage> {
     if (searchResults.isEmpty) {
       return const Center(child: Text('No results found.'));
     }
-    return SizedBox(
-      height: 400,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: searchResults.length,
-        itemBuilder: (context, index) {
-          final result = searchResults[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SearchLocationDetailPage(location: result),
-                  ),
-                );
-              },
-              leading: const Icon(
-                Icons.location_on,
-                size: 40,
-                color: Colors.grey,
-              ),
-              title: Text(
-                result.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rating: ${result.rating ?? 'N/A'}'),
-                  Text(
-                    result.description ?? 'No description available',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: searchResults.length,
+      itemBuilder: (context, index) {
+        final result = searchResults[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 2,
+          child: ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SearchLocationDetailPage(location: result),
+                ),
+              );
+            },
+            leading: const Icon(
+              Icons.location_on,
+              size: 40,
+              color: Colors.grey,
             ),
-          );
-        },
-      ),
+            title: Text(
+              result.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rating: ${result.rating ?? 'N/A'}'),
+                Text(
+                  result.description ?? 'No description available',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _promotionsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 20, top: 20),
+          child: Text(
+            'Promotions',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 15),
+        Container(
+          height: 150,
+          color: const Color.fromARGB(255, 255, 255, 255),
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(left: 20, right: 20),
+            itemCount: promotions.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 15),
+            itemBuilder: (context, index) {
+              final promotion = promotions[index];
+              return Container(
+                width: 250,
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 240, 144, 9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        promotion.imagePath,
+                        height: 100,
+                        width: 230,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      promotion.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Color.fromARGB(255, 255, 255, 255),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

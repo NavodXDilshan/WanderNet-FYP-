@@ -89,7 +89,7 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
                   title: Text(
                     location.name,
                     style: const TextStyle(
-                      color: Color.fromARGB(255, 255, 255, 255),
+                      color: Color.fromARGB(255, 0, 0, 0),
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),

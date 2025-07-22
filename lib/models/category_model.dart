@@ -30,7 +30,7 @@ class CategoryModel {
       
       categories.add(
       CategoryModel(
-        name: 'Entertainment', 
+        name: 'Enjoyment', 
         iconPath:'assets/icons/sites.svg' , 
         boxColor: Color(0xff92A3FD)
     ));
