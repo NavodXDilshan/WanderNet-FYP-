@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:app/services/auth_service.dart';
+import 'dart:async';
 
 class CreatePostPage extends StatefulWidget {
   const CreatePostPage({super.key});
@@ -18,16 +20,107 @@ class CreatePostPage extends StatefulWidget {
 
 class _CreatePostPageState extends State<CreatePostPage> {
   final _contentController = TextEditingController();
+  final _locationSearchController = TextEditingController();
   LatLng? _selectedLocation;
   String? _locationName;
   GoogleMapController? _mapController;
   bool _isLoadingLocation = false;
+  bool _isSearchingLocation = false;
+  bool _showLocationSearch = false;
+  String? userEmail;
+  String? username;
+  String? userId;
   
   // Image upload related variables
   File? _selectedImage;
   bool _isUploadingImage = false;
   String? _uploadedImageUrl;
   final ImagePicker _picker = ImagePicker();
+  
+  // Location search related variables
+  List<Location> _searchResults = [];
+  Timer? _searchTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      userEmail = userInfo['userEmail'];
+      username = userInfo['username'];
+      userId = userInfo['userId'];
+    });
+  }
+
+  // Location search functionality
+  void _onSearchChanged(String query) {
+    if (_searchTimer != null) {
+      _searchTimer!.cancel();
+    }
+    
+    _searchTimer = Timer(const Duration(milliseconds: 500), () {
+      if (query.isNotEmpty) {
+        _searchLocation(query);
+      } else {
+        setState(() {
+          _searchResults = [];
+        });
+      }
+    });
+  }
+
+  Future<void> _searchLocation(String query) async {
+    setState(() {
+      _isSearchingLocation = true;
+    });
+    
+    try {
+      List<Location> locations = await locationFromAddress(query);
+      setState(() {
+        _searchResults = locations.take(5).toList(); // Limit to 5 results
+        _isSearchingLocation = false;
+      });
+    } catch (e) {
+      setState(() {
+        _searchResults = [];
+        _isSearchingLocation = false;
+      });
+      print('Error searching location: $e');
+    }
+  }
+
+  Future<void> _selectSearchedLocation(Location location) async {
+    LatLng selectedLocation = LatLng(location.latitude, location.longitude);
+    
+    setState(() {
+      _selectedLocation = selectedLocation;
+      _showLocationSearch = false;
+      _searchResults = [];
+      _locationSearchController.clear();
+    });
+    
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(selectedLocation, 15),
+      );
+    }
+    
+    await _getLocationName(selectedLocation);
+  }
+
+  void _toggleLocationSearch() {
+    setState(() {
+      _showLocationSearch = !_showLocationSearch;
+      if (!_showLocationSearch) {
+        _locationSearchController.clear();
+        _searchResults = [];
+      }
+    });
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -99,7 +192,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
     developer.log("something");
 
     // Replace with your backend URL
-    const String backendUrl = 'http://192.168.1.2:3000'; // Update this
+    const String backendUrl = 'http://10.0.2.2:3000'; // Update this
     
     // First, prepare the upload
     final prepareResponse = await http.post(
@@ -316,13 +409,18 @@ class _CreatePostPageState extends State<CreatePostPage> {
     setState(() {
       _selectedLocation = null;
       _locationName = null;
+      _showLocationSearch = false;
+      _locationSearchController.clear();
+      _searchResults = [];
     });
   }
   
   @override
   void dispose() {
     _contentController.dispose();
+    _locationSearchController.dispose();
     _mapController?.dispose();
+    _searchTimer?.cancel();
     super.dispose();
   }
 
@@ -352,7 +450,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   }
                   
                   await MongoDataBase.insertPost({
-                    'userName': 'Navod Dilshan',
+                    'userName': username ?? 'Anonymous',
                     'userAvatar': 'assets/images/user1.png',
                     'timeAgo': 'Just now',
                     'content': content,
@@ -473,14 +571,101 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     subtitle: _selectedLocation != null 
                         ? const Text('Tap on map to change location')
                         : null,
-                    trailing: _selectedLocation != null
-                        ? IconButton(
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_selectedLocation == null)
+                          IconButton(
+                            icon: const Icon(Icons.search),
+                            onPressed: _toggleLocationSearch,
+                            tooltip: 'Search location',
+                          ),
+                        if (_selectedLocation != null)
+                          IconButton(
                             icon: const Icon(Icons.clear),
                             onPressed: _removeLocation,
-                          )
-                        : null,
-                    onTap: _selectedLocation == null ? _getCurrentLocation : null,
+                          ),
+                      ],
+                    ),
+                    onTap: _selectedLocation == null && !_showLocationSearch ? _getCurrentLocation : null,
                   ),
+                  
+                  // Location search field
+                  if (_showLocationSearch)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _locationSearchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search for a location...',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _isSearchingLocation
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(Icons.close),
+                                      onPressed: _toggleLocationSearch,
+                                    ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onChanged: _onSearchChanged,
+                          ),
+                          
+                          // Search results
+                          if (_searchResults.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _searchResults.length,
+                                separatorBuilder: (context, index) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final location = _searchResults[index];
+                                  return ListTile(
+                                    leading: const Icon(Icons.place, size: 20),
+                                    title: FutureBuilder<List<Placemark>>(
+                                      future: placemarkFromCoordinates(
+                                        location.latitude, 
+                                        location.longitude
+                                      ),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                                          final place = snapshot.data![0];
+                                          return Text(
+                                            '${place.name ?? place.locality ?? 'Unknown'}, ${place.country ?? 'Unknown'}',
+                                            style: const TextStyle(fontSize: 14),
+                                          );
+                                        }
+                                        return Text(
+                                          '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}',
+                                          style: const TextStyle(fontSize: 14),
+                                        );
+                                      },
+                                    ),
+                                    subtitle: Text(
+                                      '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}',
+                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                    ),
+                                    onTap: () => _selectSearchedLocation(location),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   
                   if (_selectedLocation != null) 
                     Container(
@@ -517,28 +702,43 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       ),
                     ),
                   
-                  if (_selectedLocation == null)
+                  if (_selectedLocation == null && !_showLocationSearch)
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16.0),
+                      child: Column(
                         children: [
-                          TextButton.icon(
-                            onPressed: _getCurrentLocation,
-                            icon: const Icon(Icons.my_location),
-                            label: const Text('Current Location'),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _getCurrentLocation,
+                                  icon: const Icon(Icons.my_location),
+                                  label: const Text('Current Location'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                              onPressed: () {
+                                LatLng defaultLocation = const LatLng(37.7749, -122.4194);
+                                setState(() {
+                                  _selectedLocation = defaultLocation;
+                                });
+                                _getLocationName(defaultLocation);
+                              },
+                              icon: const Icon(Icons.map),
+                              label: const Text('Choose on Map'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                              ),
+                            ],
                           ),
-                          TextButton.icon(
-                            onPressed: () {
-                              LatLng defaultLocation = const LatLng(37.7749, -122.4194);
-                              setState(() {
-                                _selectedLocation = defaultLocation;
-                              });
-                              _getLocationName(defaultLocation);
-                            },
-                            icon: const Icon(Icons.map),
-                            label: const Text('Choose on Map'),
-                          ),
+                          
                         ],
                       ),
                     ),
