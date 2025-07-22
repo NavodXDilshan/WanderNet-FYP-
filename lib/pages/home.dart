@@ -142,9 +142,8 @@ class _HomepageState extends State<Homepage> {
         final results = (data['data'] as List)
             .map((item) => SearchLocationModel.fromJson({
                   'name': item['name'] ?? 'Unknown',
-                  'locationId': item['location_id']?.toString() ?? '',
-                  'rating': item['rating']?.toString() ?? 'N/A',
-                  'description': item['description'] ?? 'No description available',
+                  'location_id': item['location_id']?.toString() ?? '', // Corrected key
+                  'address_obj': item['address_obj'], // Pass entire address_obj
                 }))
             .toList();
         setState(() {
@@ -203,10 +202,10 @@ class _HomepageState extends State<Homepage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false, // Prevents scaffold resizing with keyboard
+      resizeToAvoidBottomInset: false,
       appBar: _appBar(),
       backgroundColor: Colors.white,
-      body: SingleChildScrollView( // Makes the entire content vertically scrollable
+      body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -214,17 +213,15 @@ class _HomepageState extends State<Homepage> {
             _searchField(),
             const SizedBox(height: 40),
             _categoriesSection(),
-            // Remove fixed height, let the content determine the size
             isLoading || isSearching
                 ? _loadingIndicator()
                 : selectedCategory == null && searchResults.isEmpty
                     ? const Padding(
-                        padding: EdgeInsets.only(top: 50), // adds 20px of space above
-                          child: Center(
-                            child: Text('Select a category or search for locations.'),
-                                        ),
-                                )
-
+                        padding: EdgeInsets.only(top: 50),
+                        child: Center(
+                          child: Text('Select a category or search for locations.'),
+                        ),
+                      )
                     : searchResults.isNotEmpty
                         ? _searchResultsSection()
                         : selectedCategory!.toLowerCase() == 'beaches'
@@ -291,26 +288,6 @@ class _HomepageState extends State<Homepage> {
           prefixIcon: Padding(
             padding: const EdgeInsets.all(12.0),
             child: SvgPicture.asset('assets/icons/Search.svg'),
-          ),
-          suffixIcon: Container(
-            width: 100,
-            child: IntrinsicHeight(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const VerticalDivider(
-                    color: Colors.black,
-                    indent: 10,
-                    endIndent: 10,
-                    thickness: 0.1,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: SvgPicture.asset('assets/icons/Filter.svg'),
-                  ),
-                ],
-              ),
-            ),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(15),
@@ -397,8 +374,8 @@ class _HomepageState extends State<Homepage> {
       return const Center(child: Text('No beaches found.'));
     }
     return ListView.builder(
-      shrinkWrap: true, // Allows the ListView to take only the space it needs
-      physics: const NeverScrollableScrollPhysics(), // Prevents inner scrolling
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       itemCount: beaches.length,
       itemBuilder: (context, index) {
@@ -692,12 +669,8 @@ class _HomepageState extends State<Homepage> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Rating: ${result.rating ?? 'N/A'}'),
-                Text(
-                  result.description ?? 'No description available',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text('City: ${result.city ?? 'N/A'}'),
+                Text('Country: ${result.country ?? 'N/A'}'),
               ],
             ),
           ),

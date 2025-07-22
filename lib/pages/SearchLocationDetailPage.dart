@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 
-
 class SearchLocationDetailPage extends StatefulWidget {
   final SearchLocationModel location;
 
@@ -20,7 +19,12 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
   @override
   void initState() {
     super.initState();
-    _detailedLocation = SearchLocationModel.fetchDetails(widget.location.locationId ?? '');
+    print('Initial location: name=${widget.location.name}, locationId=${widget.location.locationId}');
+    if (widget.location.locationId?.isNotEmpty ?? false) {
+      _detailedLocation = SearchLocationModel.fetchDetails(widget.location.locationId!, initialModel: widget.location);
+    } else {
+      _detailedLocation = Future.value(widget.location);
+    }
   }
 
   Future<void> _launchURL(String url, BuildContext context) async {
@@ -44,7 +48,9 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
 
   String _getBookingUrl(String platform) {
     final encodedName = Uri.encodeComponent(widget.location.name);
-    const encodedCity = 'Colombo'; // Default city; could be refined with API data
+    final encodedCity = widget.location.city != null && widget.location.city!.isNotEmpty
+        ? Uri.encodeComponent(widget.location.city!)
+        : 'Colombo';
     switch (platform.toLowerCase()) {
       case 'tripadvisor':
         return 'https://www.tripadvisor.com/Search?q=$encodedName%20$encodedCity';
@@ -75,6 +81,7 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
+            print('FutureBuilder error: ${snapshot.error}');
             return Center(child: Text('Error loading details: ${snapshot.error}'));
           }
           final location = snapshot.data ?? widget.location;
@@ -86,14 +93,14 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
                 expandedHeight: 60.0,
                 backgroundColor: const Color.fromARGB(255, 240, 144, 9),
                 flexibleSpace: FlexibleSpaceBar(
-                  title: Text(
-                    location.name,
-                    style: const TextStyle(
-                      color: Color.fromARGB(255, 0, 0, 0),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  // title: Text(
+                  //   widget.location.name,
+                  //   style: const TextStyle(
+                  //     color: Color.fromARGB(255, 0, 0, 0),
+                  //     fontSize: 15,
+                  //     fontWeight: FontWeight.w600,
+                  //   ),
+                  // ),
                   centerTitle: true,
                   titlePadding: const EdgeInsets.only(bottom: 10),
                 ),
@@ -113,21 +120,6 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
                     ),
                   ),
                 ),
-                actions: [
-                  GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      margin: const EdgeInsets.all(10),
-                      alignment: Alignment.center,
-                      width: 30,
-                      child: SvgPicture.asset('assets/icons/dots.svg'),
-                      decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 240, 144, 9),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ],
               ),
               SliverToBoxAdapter(
                 child: location.imageUrl != null
@@ -172,13 +164,13 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
                         children: [
                           Flexible(
                             child: Text(
-                              location.name,
+                              widget.location.name,
                               style: const TextStyle(
-                                fontSize: 24,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.black,
                               ),
-                              textAlign: TextAlign.center,
+                              textAlign: TextAlign.left,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -188,6 +180,25 @@ class _SearchLocationDetailPageState extends State<SearchLocationDetailPage> {
                             onPressed: () => _copyToClipboard(context),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'City: ${location.city ?? 'N/A'}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        'Country: ${location.country ?? 'N/A'}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       Text(

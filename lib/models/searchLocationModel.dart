@@ -8,6 +8,8 @@ class SearchLocationModel {
   String? description;
   String? imageUrl;
   List<Map<String, dynamic>>? reviews;
+  String? city;
+  String? country;
 
   SearchLocationModel({
     required this.name,
@@ -16,14 +18,18 @@ class SearchLocationModel {
     this.description,
     this.imageUrl,
     this.reviews,
+    this.city,
+    this.country,
   });
 
   factory SearchLocationModel.fromJson(Map<String, dynamic> json) {
     return SearchLocationModel(
       name: json['name'] ?? 'Unknown',
-      locationId: json['locationId'],
-      rating: json['rating'],
+      locationId: json['location_id']?.toString() ?? '',
+      rating: json['rating']?.toString(),
       description: json['description'],
+      city: json['address_obj']?['city'],
+      country: json['address_obj']?['country'],
     );
   }
 
@@ -35,13 +41,35 @@ class SearchLocationModel {
       'description': description,
       'imageUrl': imageUrl,
       'reviews': reviews,
+      'city': city,
+      'country': country,
     };
   }
 
-  static Future<SearchLocationModel> fetchDetails(String locationId) async {
+  static Future<SearchLocationModel> fetchDetails(String locationId, {SearchLocationModel? initialModel}) async {
     const apiKey = '5E6B8DAB15DD45B6BD299E1C50DE14C1';
     const baseUrl = 'https://api.content.tripadvisor.com/api/v1';
-    final model = SearchLocationModel(name: '', locationId: locationId);
+    final model = SearchLocationModel(
+      name: initialModel?.name ?? '',
+      locationId: locationId,
+      city: initialModel?.city,
+      country: initialModel?.country,
+    );
+
+    // Validate locationId
+    if (locationId.isEmpty) {
+      print('Error: locationId is empty');
+      return SearchLocationModel(
+        name: initialModel?.name ?? '',
+        locationId: locationId,
+        rating: initialModel?.rating ?? 'N/A',
+        description: initialModel?.description ?? 'Invalid location ID',
+        imageUrl: null,
+        reviews: initialModel?.reviews ?? [{'text': 'Invalid location ID', 'rating': 'N/A'}],
+        city: initialModel?.city,
+        country: initialModel?.country,
+      );
+    }
 
     try {
       // Fetch location details
@@ -56,13 +84,16 @@ class SearchLocationModel {
 
       if (detailsResponse.statusCode == 200) {
         final detailsData = jsonDecode(detailsResponse.body);
-        model.rating = detailsData['rating']?.toString() ?? 'N/A';
+        model.name = detailsData['name'] ?? initialModel?.name ?? model.name;
+        model.rating = detailsData['rating']?.toString() ?? initialModel?.rating ?? 'N/A';
         model.description = detailsData['description']?.isNotEmpty ?? false
             ? detailsData['description']
-            : 'No description available';
+            : initialModel?.description ?? 'No description available';
+        model.city = detailsData['address_obj']?['city'] ?? initialModel?.city;
+        model.country = detailsData['address_obj']?['country'] ?? initialModel?.country;
       } else {
-        model.rating = 'N/A';
-        model.description = 'Failed to load description';
+        model.rating = initialModel?.rating ?? 'N/A';
+        model.description = initialModel?.description ?? 'Failed to load description';
         print('Failed to load details for $locationId: ${detailsResponse.statusCode}');
       }
 
@@ -106,15 +137,17 @@ class SearchLocationModel {
           'rating': review['rating']?.toString() ?? 'N/A',
         }).toList() ?? [];
       } else {
-        model.reviews = [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
+        model.reviews = initialModel?.reviews ?? [{'text': 'Failed to load reviews', 'rating': 'N/A'}];
         print('Failed to load reviews for $locationId: ${reviewsResponse.statusCode}');
       }
     } catch (e) {
       print('Error fetching data for $locationId: $e');
-      model.rating = 'N/A';
-      model.description = 'Error loading data';
+      model.rating = initialModel?.rating ?? 'N/A';
+      model.description = initialModel?.description ?? 'Error loading data';
       model.imageUrl = null;
-      model.reviews = [{'text': 'Error loading reviews', 'rating': 'N/A'}];
+      model.reviews = initialModel?.reviews ?? [{'text': 'Error loading reviews', 'rating': 'N/A'}];
+      model.city = initialModel?.city;
+      model.country = initialModel?.country;
     }
 
     return model;
