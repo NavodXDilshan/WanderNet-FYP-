@@ -23,9 +23,9 @@ class MongoDataBase {
       _dbPosts = await mongo.Db.create(MONGO_URL_posts);
       _dbWishlist = await mongo.Db.create(MONGO_URL_wishlist);
       _dbMarket = await mongo.Db.create(MONGO_URL_market);
-      await _dbPosts!.open();
-      await _dbWishlist!.open();
-      await _dbMarket!.open();
+      await _dbPosts!.open(secure: true);
+      await _dbWishlist!.open(secure: true);
+      await _dbMarket!.open(secure: true);
       _postsCollection = _dbPosts!.collection('posts');
       _wishlistCollection = _dbWishlist!.collection('k.m.navoddilshan@gmail.com');
       _marketCollection = _dbMarket!.collection(COLLECTION_NAME_MARKET);
@@ -351,4 +351,6 @@ class MongoDataBase {
     _ensureReportsInitialized();
     return _dbReports!;
   }
+
+  
 }
