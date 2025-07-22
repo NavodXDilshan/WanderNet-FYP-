@@ -5,6 +5,7 @@ import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/pages/create_post.dart';
+import 'package:app/services/auth_service.dart';
 
 
 class Feed extends StatefulWidget {
