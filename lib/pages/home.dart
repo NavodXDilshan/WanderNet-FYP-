@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:app/pages/chatbot.dart'; // Import ChatbotPage
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -121,6 +122,19 @@ class _HomepageState extends State<Homepage> {
     return Scaffold(
       appBar: _appBar(),
       backgroundColor: Colors.white,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
+          );
+        },
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        heroTag: 'chatbot',
+        child: const Icon(Icons.chat_bubble),
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -663,6 +677,19 @@ class LocationDetailPage extends StatelessWidget {
             ),
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
+          );
+        },
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        heroTag: 'chatbot',
+        child: const Icon(Icons.chat_bubble),
       ),
       body: SingleChildScrollView(
         child: Column(

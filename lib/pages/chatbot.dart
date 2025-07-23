@@ -16,7 +16,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
-  final String _apiUrl = 'http://192.168.1.2:8000/chat'; // Update if deployed elsewhere
+  final String _apiUrl = 'http://192.168.8.102:8000/chat'; // Update if deployed elsewhere
 
   @override
   void initState() {

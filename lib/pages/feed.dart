@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:app/models/post_model.dart';
 import 'package:app/pages/profile.dart';
 import 'package:app/dbHelper/mongodb.dart';
+import 'package:app/pages/chatbot.dart'; // Import ChatbotPage
 
 class Feed extends StatefulWidget {
   const Feed({super.key});
@@ -23,50 +24,71 @@ class _FeedState extends State<Feed> {
       appBar: appbar(),
       backgroundColor: Colors.white,
       endDrawer: drawerBar(context),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final controller = TextEditingController();
-          final result = await showDialog<String>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text("New Post"),
-              content: TextField(
-                controller: controller,
-                decoration: const InputDecoration(hintText: "What's on your mind?"),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatbotPage(),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, controller.text),
-                  child: const Text("Post"),
+              );
+            },
+            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+            heroTag: 'chatbot',
+            child: const Icon(Icons.chat_bubble),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton(
+            onPressed: () async {
+              final controller = TextEditingController();
+              final result = await showDialog<String>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text("New Post"),
+                  content: TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(hintText: "What's on your mind?"),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Cancel"),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, controller.text),
+                      child: const Text("Post"),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-          if (result != null && result.isNotEmpty) {
-            await MongoDataBase.insertPost({
-              'userName': 'Navod Dilshan',
-              'userAvatar': 'assets/images/user1.png',
-              'timeAgo': 'Just now',
-              'content': result,
-              'imagePath': null,
-              'likes': 0,
-              'comments': 0,
-              'shares': 0,
-              'likedBy': [],
-              'createdAt': DateTime.now().toIso8601String(),
-              'commentsList': [],
-            });
-            setState(() {}); // Refresh posts
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Post created successfully")),
-            );
-          }
-        },
-        child: const Icon(Icons.add),
+              );
+              if (result != null && result.isNotEmpty) {
+                await MongoDataBase.insertPost({
+                  'userName': 'Navod Dilshan',
+                  'userAvatar': 'assets/images/user1.png',
+                  'timeAgo': 'Just now',
+                  'content': result,
+                  'imagePath': null,
+                  'likes': 0,
+                  'comments': 0,
+                  'shares': 0,
+                  'likedBy': [],
+                  'createdAt': DateTime.now().toIso8601String(),
+                  'commentsList': [],
+                });
+                setState(() {}); // Refresh posts
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Post created successfully")),
+                );
+              }
+            },
+            backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+            heroTag: 'addPost',
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
