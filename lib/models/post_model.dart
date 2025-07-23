@@ -14,6 +14,7 @@ class PostModel {
   final String? placeId;
   final DateTime createdAt;
   final List<Map<String, dynamic>> commentsList;
+  final String? valid;
 
   PostModel({
     required this.id,
@@ -31,5 +32,6 @@ class PostModel {
     this.placeId,
     required this.createdAt,
     this.commentsList = const [],
+    this.valid,
   });
 }

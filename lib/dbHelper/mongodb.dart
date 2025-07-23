@@ -1,6 +1,6 @@
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:app/dbHelper/constant.dart';
-import '../pages/market.dart'; 
+import '../pages/market.dart';
 
 class MongoDataBase {
   static mongo.Db? _dbPosts;
@@ -17,7 +17,7 @@ class MongoDataBase {
   static bool _isChatsConnected = false;
   static bool _isReportsConnected = false;
 
-static Future<void> connect() async {
+  static Future<void> connect() async {
     try {
       if (_isConnected) return;
 
@@ -28,11 +28,11 @@ static Future<void> connect() async {
       await _dbWishlist!.open();
       await _dbMarket!.open();
       _postsCollection = _dbPosts!.collection('posts');
-      _wishlistCollection = _dbWishlist!.collection(await _getCurrentUserEmail()); // Dynamic collection
+      _wishlistCollection = _dbWishlist!.collection(await _getCurrentUserEmail());
       _marketCollection = _dbMarket!.collection(COLLECTION_NAME_MARKET);
       _isConnected = true;
       print('MongoDB connected successfully');
-      _startPeriodicPing(); // Keep connection alive
+      _startPeriodicPing();
     } catch (e) {
       print('MongoDB connection error: $e');
       rethrow;
@@ -40,13 +40,11 @@ static Future<void> connect() async {
   }
 
   static Future<String> _getCurrentUserEmail() async {
-    // Placeholder: Replace with actual user email retrieval
-    final userInfo = await AuthService.getUserInfo(); // Assuming AuthService is available
+    final userInfo = await AuthService.getUserInfo();
     return userInfo['userEmail'] ?? 'k.m.navoddilshan@gmail.com';
   }
 
   static void _startPeriodicPing() {
-    // Periodic ping to keep connection alive
     Future.doWhile(() async {
       await Future.delayed(const Duration(minutes: 5));
       if (_dbWishlist != null && _dbWishlist!.isConnected) {
@@ -58,7 +56,7 @@ static Future<void> connect() async {
           await MongoDataBase.reconnect();
         }
       }
-      return true; // Continue looping
+      return true;
     });
   }
 
@@ -109,6 +107,28 @@ static Future<void> connect() async {
     }
   }
 
+  static Future<Map<String, dynamic>?> fetchMarketItemByUserEmail(String userEmail) async {
+    _ensureInitialized();
+    try {
+      final item = await _marketCollection!.findOne(mongo.where.eq('userEmail', userEmail));
+      return item?.cast<String, dynamic>();
+    } catch (e) {
+      print('Error fetching market item by userEmail $userEmail: $e');
+      return null;
+    }
+  }
+
+  static Future<void> deleteMarketItem(String userEmail) async {
+    _ensureInitialized();
+    try {
+      await _marketCollection!.deleteOne(mongo.where.eq('userEmail', userEmail));
+      print('Market item deleted for userEmail $userEmail');
+    } catch (e) {
+      print('Error deleting market item: $e');
+      rethrow;
+    }
+  }
+
   static Future<void> insertMarketItem(Map<String, dynamic> itemData) async {
     _ensureInitialized();
     try {
@@ -132,6 +152,17 @@ static Future<void> connect() async {
     }
   }
 
+  static Future<void> deletePost(String postId) async {
+    _ensureInitialized();
+    try {
+      await _postsCollection!.deleteOne(mongo.where.eq('_id', mongo.ObjectId.fromHexString(postId)));
+      print('Post deleted with ID $postId');
+    } catch (e) {
+      print('Error deleting post: $e');
+      rethrow;
+    }
+  }
+
   static Future<void> insertPost(Map<String, dynamic> postData) async {
     _ensureInitialized();
     try {
@@ -142,11 +173,12 @@ static Future<void> connect() async {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> fetchPosts() async {
+  static Future<List<Map<String, dynamic>>> fetchPosts({String? username}) async {
     _ensureInitialized();
     try {
+      final query = username != null ? mongo.where.eq('userName', username) : mongo.where;
       final posts = await _postsCollection!
-          .find(mongo.where.sortBy('createdAt', descending: true))
+          .find(query.sortBy('createdAt', descending: true))
           .toList();
       return posts.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -377,7 +409,6 @@ static Future<void> connect() async {
     return _dbReports!;
   }
 
-  /// Checks the connection status for all databases.
   static Future<void> checkConnection() async {
     try {
       await _checkSpecificConnection(_dbPosts, _isConnected);
@@ -387,18 +418,16 @@ static Future<void> connect() async {
       await _checkSpecificConnection(_dbReports, _isReportsConnected);
     } catch (e) {
       print('Connection check failed: $e');
-      throw e; // Let the caller handle reconnection
+      throw e;
     }
   }
 
-  /// Helper method to check a specific database connection.
   static Future<void> _checkSpecificConnection(mongo.Db? db, bool isConnectedFlag) async {
     if (db == null || !db.isConnected) {
       isConnectedFlag = false;
       throw Exception('Database connection lost');
     }
     try {
-      // Use a lightweight query to test connection
       await db.collection('test').findOne();
       isConnectedFlag = true;
     } catch (e) {
@@ -408,7 +437,6 @@ static Future<void> connect() async {
     }
   }
 
-  /// Reconnects all databases with exponential backoff.
   static Future<void> reconnect() async {
     int retryCount = 0;
     const int maxRetries = 5;
@@ -436,7 +464,6 @@ static Future<void> connect() async {
     }
   }
 
-  /// Helper method to reconnect a specific database.
   static Future<void> _reconnectSpecific(mongo.Db? db, String dbName, Future<void> Function() connectMethod, bool isConnectedFlag) async {
     if (db != null) {
       try {

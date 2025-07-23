@@ -153,14 +153,14 @@ class PlannerState extends State<Planner> {
     try {
       final items = await MongoDataBase.fetchWishlistItems(userEmail!);
       print('Loaded wishlist items for $userEmail: ${items.length}');
-      final seenPlaceIds = <String>{};
+      final seenMarkerIds = <String>{};
       final uniqueItems = items.where((item) {
-        final placeId = item['placeId'] as String? ?? (item['placeName'] as String? ?? 'Unknown Place');
-        if (seenPlaceIds.contains(placeId)) {
-          print('Duplicate placeId detected: $placeId');
+        final id = item['_id'].toString();
+        if (seenMarkerIds.contains(id)) {
+          print('Duplicate _id detected: $id');
           return false;
         }
-        seenPlaceIds.add(placeId);
+        seenMarkerIds.add(id);
         return true;
       }).toList();
 
@@ -168,25 +168,25 @@ class PlannerState extends State<Planner> {
         final lat = item['latitude'] as double?;
         final lng = item['longitude'] as double?;
         final placeName = item['placeName'] as String? ?? 'Unknown Place';
-        final placeId = item['placeId'] as String? ?? placeName;
+        final markerId = item['_id'].toString();
         if (lat == null || lng == null) {
           print('Invalid coordinates for $placeName: lat=$lat, lng=$lng');
           return null;
         }
+        print('Creating marker for $placeName with markerId: $markerId');
         return Marker(
-          markerId: MarkerId(placeId),
+          markerId: MarkerId(markerId),
           position: LatLng(lat, lng),
           infoWindow: InfoWindow(
             title: placeName,
           ),
-          onTap: () => _showRemoveDialog(placeId, placeName),
+          onTap: () => _showRemoveDialog(item['placeId'] ?? placeName, placeName),
         );
       }).whereType<Marker>().toSet();
 
       setState(() {
         wishlistItems = uniqueItems;
         _markers = newMarkers;
-        // Reset selectedStartPlaceId and selectedTargetPlaceId if they are invalid
         if (wishlistItems.isNotEmpty) {
           final validStart = wishlistItems.any((item) => item['placeId'] == selectedStartPlaceId || item['placeName'] == selectedStartPlaceId);
           final validTarget = wishlistItems.any((item) => item['placeId'] == selectedTargetPlaceId || item['placeName'] == selectedTargetPlaceId);
@@ -202,7 +202,7 @@ class PlannerState extends State<Planner> {
           selectedTargetPlaceId = null;
         }
       });
-      print('Wishlist updated: ${wishlistItems.length} items, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
+      print('Wishlist updated: ${wishlistItems.length} items, Markers: ${_markers.length}, Start: $selectedStartPlaceId, Target: $selectedTargetPlaceId');
     } catch (e) {
       print('Failed to load wishlist data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -359,7 +359,6 @@ class PlannerState extends State<Planner> {
               })
           .toList();
 
-      // Ensure switch_weights and scores match locations length
       final switchWeights = wishlistItems
           .asMap()
           .entries
@@ -571,25 +570,11 @@ class PlannerState extends State<Planner> {
         if (json['status'] == 'OK' && json['results'].isNotEmpty) {
           final location = json['results'][0]['geometry']['location'];
           final placeName = json['results'][0]['formatted_address'] ?? city;
+          final placeId = json['results'][0]['place_id'] as String? ?? placeName;
           final lat = location['lat'] as double;
           final lng = location['lng'] as double;
 
-          final marker = Marker(
-            markerId: MarkerId(placeName),
-            position: LatLng(lat, lng),
-            infoWindow: InfoWindow(
-              title: placeName,
-              onTap: () => _showRemoveDialog(placeName, placeName),
-            ),
-            onTap: () => _showRemoveDialog(placeName, placeName),
-          );
-
-          await _addToWishlistAndMap(placeName, lat, lng, placeName);
-          if (!_markers.any((m) => m.markerId.value == placeName)) {
-            setState(() {
-              _markers.add(marker);
-            });
-          }
+          await _addToWishlistAndMap(placeName, lat, lng, placeId);
           _mapController?.animateCamera(
             CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12.0),
           );
@@ -630,7 +615,7 @@ class PlannerState extends State<Planner> {
         'placeName': name,
         'latitude': lat,
         'longitude': lng,
-        'placeId': placeId,
+        'placeId': placeId.isEmpty ? name : placeId,
         'createdAt': DateTime.now().toIso8601String(),
       });
       print('Saved to wishlist: $name for $userEmail');
@@ -729,6 +714,7 @@ class PlannerState extends State<Planner> {
         onTargetChanged: _updateSelectedTarget,
         useRealRoutes: _useRealRoutes,
         onRouteTypeChanged: _toggleRouteType,
+        onWishlistUpdated: _loadWishlistData, // Pass callback to DrawerBar
       ),
       endDrawer: NearbyAttractionsDrawer(
         nearbyAttractions: nearbyAttractions,
@@ -868,6 +854,7 @@ class DrawerBar extends StatelessWidget {
   final ValueChanged<String?> onTargetChanged;
   final bool useRealRoutes;
   final ValueChanged<bool> onRouteTypeChanged;
+  final VoidCallback onWishlistUpdated; // Callback to refresh Planner
 
   const DrawerBar({
     super.key,
@@ -883,6 +870,7 @@ class DrawerBar extends StatelessWidget {
     required this.onTargetChanged,
     required this.useRealRoutes,
     required this.onRouteTypeChanged,
+    required this.onWishlistUpdated,
   });
 
   @override
@@ -917,7 +905,9 @@ class DrawerBar extends StatelessWidget {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const Settings()),
+                MaterialPageRoute(
+                  builder: (context) => Settings(onWishlistUpdated: onWishlistUpdated), // Pass callback to Settings
+                ),
               );
             },
           ),

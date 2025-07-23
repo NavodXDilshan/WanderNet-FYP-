@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
-import 'package:app/dbHelper/mongodb.dart';
+import '../dbHelper/mongodb.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
@@ -120,6 +120,8 @@ class MarketCategory {
       MarketCategory(name: 'Electronics', iconPath: 'assets/icons/electronics.png'),
       MarketCategory(name: 'Clothing', iconPath: 'assets/icons/clothing.png'),
       MarketCategory(name: 'Furniture', iconPath: 'assets/icons/furniture.png'),
+      MarketCategory(name: 'Food', iconPath: 'assets/icons/food.png'),
+      MarketCategory(name: 'Other', iconPath: 'assets/icons/other.png'),
     ];
   }
 }
@@ -144,6 +146,7 @@ class _MarketState extends State<Market> {
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final RefreshController _refreshController = RefreshController(initialRefresh: false);
+  bool _isRefreshingChats = false;
 
   @override
   void initState() {
@@ -228,6 +231,26 @@ class _MarketState extends State<Market> {
         userId: userId!,
       ),
     );
+  }
+
+  Future<void> _refreshConversations() async {
+    setState(() {
+      _isRefreshingChats = true;
+    });
+    try {
+      await _loadUserInfo();
+      setState(() {}); // Trigger rebuild to re-run _fetchConversations
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      print('Error refreshing conversations: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to refresh chats: $e')),
+      );
+    } finally {
+      setState(() {
+        _isRefreshingChats = false;
+      });
+    }
   }
 
   @override
@@ -427,7 +450,7 @@ class _MarketState extends State<Market> {
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.75, // Adjusted to better fit content with image
+        childAspectRatio: 0.75,
       ),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
@@ -454,15 +477,15 @@ class _MarketState extends State<Market> {
                 ),
               );
             },
-            child: ConstrainedBox( // Added to prevent overflow
+            child: ConstrainedBox(
               constraints: const BoxConstraints(
-                maxHeight: 250, // Set a max height to prevent overflow
+                maxHeight: 250,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    height: 120, // Fixed height for image
+                    height: 120,
                     width: double.infinity,
                     child: item.imageUrl != null && item.imageUrl!.isNotEmpty
                         ? Image.network(
@@ -513,14 +536,6 @@ class _MarketState extends State<Market> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        // Text(
-                        //   'By: ${item.username}',
-                        //   style: const TextStyle(
-                        //     fontSize: 12,
-                        //     color: Colors.grey,
-                        //   ),
-                        // ),
-                        const SizedBox(height: 4),
                         Text(
                           item.category,
                           style: const TextStyle(
@@ -548,28 +563,44 @@ class _MarketState extends State<Market> {
             decoration: const BoxDecoration(
               color: Color.fromARGB(255, 240, 144, 9),
             ),
-            child: Align(
-              alignment: Alignment.center,
-              child: Text(
-                'Inbox',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Poppins',
+            child: Stack(
+              children: [
+                const Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Inbox',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
                 ),
-              ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    icon: _isRefreshingChats
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _isRefreshingChats ? null : _refreshConversations,
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: SmartRefresher(
               controller: _refreshController,
               enablePullDown: true,
-              onRefresh: () async {
-                await _loadUserInfo();
-                setState(() {});
-                _refreshController.refreshCompleted();
-              },
+              onRefresh: _refreshConversations,
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: _fetchConversations(),
                 builder: (context, snapshot) {
@@ -600,6 +631,10 @@ class _MarketState extends State<Market> {
                           participantName,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
+                        // subtitle: Text(
+                        //   'Recent: ${conversation['itemName']}',
+                        //   style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        // ),
                         onTap: () {
                           if (userEmail == null || userId == null || username == null) {
                             Navigator.push(context, MaterialPageRoute(builder: (context) => const SignInPage()));
@@ -610,7 +645,7 @@ class _MarketState extends State<Market> {
                             MaterialPageRoute(
                               builder: (context) => ChatWithSeller(
                                 sellerEmail: conversation['sellerEmail'] ?? '',
-                                itemName: conversation['username'] ?? conversation['sellerEmail'] ?? 'Unknown',
+                                itemName: conversation['itemName'] ?? 'Unknown Item',
                                 currentUserEmail: userEmail!,
                                 currentUsername: username!,
                                 currentUserId: userId!,
@@ -636,7 +671,6 @@ class _MarketState extends State<Market> {
       return [];
     }
     try {
-      // Ensure database connection
       await MongoDataBase.connectToChats();
       final db = MongoDataBase.chatDb;
       final collectionNames = (await db.getCollectionNames()).whereType<String>().toList();
@@ -656,6 +690,14 @@ class _MarketState extends State<Market> {
           continue;
         }
         final messages = await MongoDataBase.fetchChatMessages(userEmail!, otherUserEmail);
+        String? participantUsername;
+        try {
+          final marketItem = await MongoDataBase.fetchMarketItemByUserEmail(otherUserEmail);
+          participantUsername = marketItem?['username']?.toString() ?? otherUserEmail;
+        } catch (e) {
+          print('Error fetching username for $otherUserEmail: $e');
+          participantUsername = otherUserEmail;
+        }
         for (var message in messages) {
           final sender = message['sender']?.toString() ?? '';
           final receiver = message['receiver']?.toString() ?? '';
@@ -664,14 +706,13 @@ class _MarketState extends State<Market> {
             print('Skipping message with empty sender/receiver: $message');
             continue;
           }
-          final senderName = message['senderName']?.toString() ?? participantEmail;
           final itemName = message['text']?.toString().split('about ').last ?? 'Unknown Item';
           final conversationKey = participantEmail;
 
           if (!seenParticipants.contains(conversationKey)) {
             conversations.add({
               'sellerEmail': participantEmail,
-              'username': senderName,
+              'username': participantUsername,
               'itemName': itemName,
             });
             seenParticipants.add(conversationKey);
@@ -923,10 +964,8 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
         _isUploadingImage = true;
       });
 
-      // Replace with your backend URL
-      const String backendUrl = 'http://192.168.1.3:3000'; // Update this
+      const String backendUrl = 'http://localhost:3000';
       
-      // First, prepare the upload
       final prepareResponse = await http.post(
         Uri.parse('$backendUrl/api/prepare-upload'),
         headers: {'Content-Type': 'application/json'},
@@ -938,10 +977,10 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               'customId': null,
             }
           ],
-          'routeConfig': ['image'], 
+          'routeConfig': ['image'],
           'metadata': null,
-          'callbackUrl': 'http://example.com/callback', 
-          'callbackSlug': 'upload-callback', 
+          'callbackUrl': 'http://example.com/callback',
+          'callbackSlug': 'upload-callback',
         }),
       );
 
@@ -951,33 +990,27 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
 
       final prepareData = jsonDecode(prepareResponse.body);
       
-      // Add null checks and better error handling
       if (prepareData[0] == null || prepareData[0].isEmpty) {
         throw Exception('Invalid response from upload service');
       }
 
       final uploadData = prepareData[0];
       
-      // Validate required fields
       if (uploadData['url'] == null) {
         throw Exception('Upload URL not provided');
       }
 
-      // Upload the file to UploadThing
       final uploadRequest = http.MultipartRequest('POST', Uri.parse(uploadData['url']));
 
-      // Handle form fields properly - check if it's a Map or List
       if (uploadData['fields'] != null) {
         final fields = uploadData['fields'];
         developer.log('Upload fields: $fields');
 
         if (fields is Map<String, dynamic>) {
-          // If it's a Map, iterate over entries
           fields.forEach((key, value) {
             uploadRequest.fields[key] = value.toString();
           });
         } else if (fields is List) {
-          // If it's a List, handle accordingly
           for (var field in fields) {
             if (field is Map<String, dynamic>) {
               field.forEach((key, value) {
@@ -988,7 +1021,6 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
         }
       }
       
-      // Add the file
       uploadRequest.files.add(
         await http.MultipartFile.fromPath('file', image.path),
       );
@@ -1000,7 +1032,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
       print('Upload response body: $responseBody');
       
       if (uploadResponse.statusCode == 200 || uploadResponse.statusCode == 201 || uploadResponse.statusCode == 204) {
-        return uploadData['fileUrl']; // Return the URL directly from uploadData
+        return uploadData['fileUrl'];
       } else {
         throw Exception('Upload failed with status ${uploadResponse.statusCode}: $responseBody');
       }
@@ -1025,7 +1057,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
     });
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text(

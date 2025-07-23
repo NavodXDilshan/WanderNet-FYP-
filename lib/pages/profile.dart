@@ -1,9 +1,44 @@
-import 'package:app/dbHelper/mongodb.dart';
-import 'package:app/models/post_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:app/models/post_model.dart';
+import 'package:app/dbHelper/mongodb.dart';
+import 'package:app/components/post_card.dart';
+import 'package:app/pages/create_post.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:app/pages/market.dart';
+import 'package:app/pages/signin.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:app/pages/edit.dart';
+
+class AuthService {
+  static final SupabaseClient supabase = Supabase.instance.client;
+
+  static Future<Map<String, String?>> getUserInfo() async {
+    final user = supabase.auth.currentUser;
+    print('Current user: ${user?.id}, email: ${user?.email}, metadata: ${user?.userMetadata}');
+    if (user == null) {
+      print('No authenticated user found');
+      return {'userEmail': null, 'username': null, 'userId': null};
+    }
+    try {
+      if (supabase.auth.currentSession?.isExpired ?? true) {
+        await supabase.auth.refreshSession();
+      }
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? 'Guest',
+        'userId': user.id,
+      };
+    } catch (e) {
+      print('Error refreshing session or fetching user info: $e');
+      return {
+        'userEmail': user.email,
+        'username': user.userMetadata?['username'] as String? ?? 'Guest',
+        'userId': user.id,
+      };
+    }
+  }
+}
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -12,512 +47,530 @@ class Profile extends StatefulWidget {
   State<Profile> createState() => _ProfileState();
 }
 
-class _ProfileState extends State<Profile> {
-  final TextEditingController _postController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  String? _selectedLocation;
-  double? _selectedLatitude;
-  double? _selectedLongitude;
-  String? _selectedPlaceId;
-  static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
-  final String userEmail = 'k.m.navoddilshan@gmail.com';
+class _ProfileState extends State<Profile> with SingleTickerProviderStateMixin {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  String? username;
+  String? userEmail;
+  String? currentUserId;
+  late TabController _tabController;
+  final _secureStorage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    _tabController = TabController(length: 2, vsync: this);
+  }
 
   @override
   void dispose() {
-    _postController.dispose();
-    _locationController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _submitPost() async {
-    if (_postController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter some content")),
-      );
-      return;
-    }
+  Future<void> _loadUserInfo() async {
+    final userInfo = await AuthService.getUserInfo();
+    setState(() {
+      username = userInfo['username'];
+      userEmail = userInfo['userEmail'];
+      currentUserId = userInfo['userId'];
+    });
+  }
 
+  Future<List<Map<String, dynamic>>> _fetchUserPosts() async {
+    if (username == null || username == 'Guest') {
+      return [];
+    }
     try {
-      final postData = {
-        'userName': 'Navod Dilshan',
-        'userAvatar': 'assets/images/user1.png',
-        'timeAgo': 'Just now',
-        'content': _postController.text,
-        'imagePath': null,
-        'likes': 0,
-        'comments': 0,
-        'shares': 0,
-        'createdAt': DateTime.now().toIso8601String(),
-        'location': _selectedLocation,
-        'latitude': _selectedLatitude,
-        'longitude': _selectedLongitude,
-        'placeId': _selectedPlaceId, // Added
-      };
-      await MongoDataBase.insertPost(postData);
+      final posts = await MongoDataBase.fetchPosts(username: username);
+      print('Fetched ${posts.length} posts for user $username');
+      return posts;
+    } catch (e) {
+      print('Error fetching user posts: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Post created successfully")),
+        SnackBar(content: Text('Failed to load posts: $e')),
       );
-      _postController.clear();
-      setState(() {
-        _selectedLocation = null;
-        _selectedLatitude = null;
-        _selectedLongitude = null;
-        _selectedPlaceId = null;
-      });
-      _locationController.clear();
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchUserMarkets() async {
+    if (userEmail == null || username == 'Guest') {
+      return [];
+    }
+    try {
+      final allMarkets = await MongoDataBase.fetchMarketItems();
+      final userMarkets = allMarkets.where((market) => market['userEmail'] == userEmail).toList();
+      print('Fetched ${userMarkets.length} markets for user email $userEmail');
+      return userMarkets;
+    } catch (e) {
+      print('Error fetching user markets: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load markets: $e')),
+      );
+      return [];
+    }
+  }
+
+  Future<void> _deletePost(String postId) async {
+    try {
+      await MongoDataBase.deletePost(postId);
+      setState(() {}); // Refresh the list
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to create post: $e")),
+        SnackBar(content: Text('Failed to delete post: $e')),
       );
     }
   }
 
-  void _showLocationSearchDialog() {
-    List<Map<String, dynamic>> predictions = [];
+  Future<void> _deleteMarket(String userEmail) async {
+    try {
+      await MongoDataBase.deleteMarketItem(userEmail);
+      setState(() {}); // Refresh the list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete market: $e')),
+      );
+    }
+  }
+
+  void _showDeleteDialog(String id, {required bool isPost}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Search Location'),
-        content: StatefulBuilder(
-          builder: (context, setDialogState) => SizedBox(
-            height: 400,
-            width: double.maxFinite,
-            child: Column(
-              children: [
-                TextField(
-                  controller: _locationController,
-                  decoration: const InputDecoration(hintText: 'Enter a place'),
-                  onChanged: (value) async {
-                    if (value.isEmpty) {
-                      setDialogState(() => predictions = []);
-                      return;
-                    }
-                    final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-                        '?input=${Uri.encodeQueryComponent(value)}'
-                        '&components=country:LK'
-                        '&key=$googleApiKey';
-                    try {
-                      final response = await http.get(Uri.parse(url));
-                      if (response.statusCode == 200) {
-                        final data = json.decode(response.body);
-                        setDialogState(() {
-                          predictions = List<Map<String, dynamic>>.from(data['predictions']);
-                        });
-                      } else {
-                        print('API Error: ${response.statusCode}');
-                      }
-                    } catch (e) {
-                      print('HTTP Error: $e');
-                    }
-                  },
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: predictions.length,
-                    itemBuilder: (context, index) {
-                      final prediction = predictions[index];
-                      return ListTile(
-                        title: Text(prediction['description'] ?? ''),
-                        onTap: () async {
-                          final placeId = prediction['place_id'];
-                          final detailsUrl = 'https://maps.googleapis.com/maps/api/place/details/json'
-                              '?place_id=$placeId'
-                              '&fields=geometry,name'
-                              '&key=$googleApiKey';
-                          try {
-                            final response = await http.get(Uri.parse(detailsUrl));
-                            if (response.statusCode == 200) {
-                              final data = json.decode(response.body);
-                              final lat = data['result']['geometry']['location']['lat'];
-                              final lng = data['result']['geometry']['location']['lng'];
-                              setState(() {
-                                _selectedLocation = prediction['description'];
-                                _selectedLatitude = lat;
-                                _selectedLongitude = lng;
-                                _selectedPlaceId = placeId;
-                              });
-                              Navigator.pop(context);
-                            } else {
-                              print('Details API Error: ${response.statusCode}');
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Failed to fetch place details")),
-                              );
-                            }
-                          } catch (e) {
-                            print('Details Error: $e');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Failed to fetch place details")),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        title: const Text('Confirm Delete'),
+        content: const Text('Are you sure you want to delete this item? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (isPost) {
+                _deletePost(id);
+              } else {
+                _deleteMarket(id);
+              }
+            },
+            child: const Text('Yes'),
+          ),
         ],
       ),
     );
   }
 
+  Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+      await _secureStorage.delete(key: 'supabase_session');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const SignInScreen()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed: $e')),
+      );
+    }
+  }
+
+  void _updateProfileState(String newUsername, String? newEmail, String? newUserId) {
+    setState(() {
+      username = newUsername;
+      userEmail = newEmail;
+      currentUserId = newUserId;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final post = PostModel(
-      id: "",
-      userName: "Navod Dilshan",
-      userAvatar: "assets/images/user1.png",
-      timeAgo: "2h ago",
-      content: "Enjoying a sunny day at the park! 🌞",
-      imagePath: "assets/images/post1.webp",
-      likes: 120,
-      comments: 15,
-      shares: 5,
-      location: "Colombo, Sri Lanka",
-      latitude: 6.9271,
-      longitude: 79.8612,
-      createdAt: DateTime.now(),
-      placeId: null,
-    );
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Profile",
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+      key: _scaffoldKey,
+      appBar: appBar(),
+      backgroundColor: Colors.white,
+      endDrawer: drawerBar(context),
+      body: Column(
+        children: [
+          Container(
+            color: const Color.fromARGB(255, 240, 144, 9),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: const [
+                Tab(text: 'Your Posts'),
+                Tab(text: 'Your Markets'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                RefreshIndicator(
+                  onRefresh: () async {
+                    if (_tabController.index == 0) setState(() {});
+                  },
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _fetchUserPosts(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return _buildLoadingSkeleton();
+                      } else if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const SingleChildScrollView(
+                          physics: AlwaysScrollableScrollPhysics(),
+                          child: Center(child: Text('No posts available')),
+                        );
+                      }
+                      final posts = snapshot.data!;
+                      return SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: posts.map((postData) {
+                              final post = PostModel(
+                                id: postData['_id']?.toHexString() ?? '',
+                                userName: postData['userName'] ?? 'Unknown',
+                                userAvatar: postData['userAvatar'] ?? 'assets/images/default.png',
+                                timeAgo: postData['timeAgo'] ?? 'Unknown time',
+                                content: postData['content'] ?? '',
+                                imagePath: postData['imagePath'],
+                                likes: _parseToInt(postData['likes']) ?? 0,
+                                comments: _parseToInt(postData['comments']) ?? 0,
+                                shares: _parseToInt(postData['shares']) ?? 0,
+                                location: postData['location'],
+                                latitude: _parseToDouble(postData['latitude']),
+                                longitude: _parseToDouble(postData['longitude']),
+                                placeId: postData['placeId'],
+                                commentsList: postData['commentsList'] != null
+                                    ? List<Map<String, dynamic>>.from(postData['commentsList'])
+                                    : [],
+                                createdAt: DateTime.parse(postData['createdAt'] ?? DateTime.now().toIso8601String()),
+                              );
+                              return Stack(
+                                children: [
+                                  PostCard(
+                                    post: post,
+                                    currentUserId: currentUserId ?? '',
+                                    userEmail: "",
+                                    username: username ?? '',
+                                    onInteraction: () {
+                                      if (_tabController.index == 0) setState(() {});
+                                    },
+                                  ),
+                                  Positioned(
+                                    top: 15,
+                                    right: 35,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () => _showDeleteDialog(post.id, isPost: true),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                RefreshIndicator(
+                  onRefresh: () async {
+                    if (_tabController.index == 1) setState(() {});
+                  },
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _fetchUserMarkets(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return _buildLoadingSkeleton();
+                      } else if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const SingleChildScrollView(
+                          physics: AlwaysScrollableScrollPhysics(),
+                          child: Center(child: Text('No markets available')),
+                        );
+                      }
+                      final markets = snapshot.data!;
+                      return SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: markets.map((marketData) {
+                              final market = MarketItemModel.fromMap(marketData);
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: Stack(
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          height: 200,
+                                          width: double.infinity,
+                                          child: market.imageUrl != null && market.imageUrl!.isNotEmpty
+                                              ? Image.network(
+                                                  market.imageUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    print('Image load error for ${market.imageUrl}: $error');
+                                                    return Container(
+                                                      color: Colors.grey[300],
+                                                      child: const Icon(
+                                                        Icons.image_not_supported,
+                                                        size: 50,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    );
+                                                  },
+                                                )
+                                              : Container(
+                                                  color: Colors.grey[300],
+                                                  child: const Icon(
+                                                    Icons.image_not_supported,
+                                                    size: 50,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                market.name,
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                "LKR ${market.price}",
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                market.category,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Created: ${marketData['createdAt'] ?? 'Unknown'}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _showDeleteDialog(marketData['userEmail'], isPost: false),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  AppBar appBar() {
+    return AppBar(
+      title: const Text(
+        "Profile",
+        style: TextStyle(
+          color: Color.fromARGB(255, 255, 255, 255),
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      centerTitle: true,
+      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+      elevation: 0.0,
+      leading: GestureDetector(
+        onTap: () {
+          Navigator.pop(context);
+        },
+        child: Container(
+          margin: const EdgeInsets.all(10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 240, 144, 9),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: SvgPicture.asset(
+            'assets/icons/Arrow - Left 2.svg',
+            width: 20,
+            height: 20,
           ),
         ),
-        centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-        elevation: 0.0,
-        leading: GestureDetector(
+      ),
+      actions: [
+        GestureDetector(
           onTap: () {
-            Navigator.pop(context);
+            _scaffoldKey.currentState?.openEndDrawer();
           },
           child: Container(
             margin: const EdgeInsets.all(10),
             alignment: Alignment.center,
+            width: 20,
             decoration: BoxDecoration(
               color: const Color.fromARGB(255, 240, 144, 9),
               borderRadius: BorderRadius.circular(10),
             ),
             child: SvgPicture.asset(
-              'assets/icons/Arrow - Left 2.svg',
+              'assets/icons/dots.svg',
               width: 20,
               height: 20,
             ),
           ),
         ),
-      ),
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.bottomLeft,
-              children: [
-                Container(
-                  height: 150,
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-                      image: AssetImage("assets/images/cover.jpeg"),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: -40,
-                  left: 20,
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.white,
-                    child: CircleAvatar(
-                      radius: 46,
-                      backgroundImage: AssetImage("assets/images/user1.png"),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 50),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Navod Dilshan",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Edit Profile clicked")),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: const Text("Edit Profile"),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _postController,
-                    decoration: InputDecoration(
-                      hintText: "What's on your mind?",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Image upload clicked")),
-                          );
-                        },
-                        icon: const Icon(Icons.photo),
-                        label: const Text("Add Photo"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[200],
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _showLocationSearchDialog,
-                        icon: const Icon(Icons.location_on),
-                        label: const Text("Add Location"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[200],
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: _submitPost,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        child: const Text("Post"),
-                      ),
-                    ],
-                  ),
-                  if (_selectedLocation != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'Location: $_selectedLocation (${_selectedLatitude?.toStringAsFixed(4)}, ${_selectedLongitude?.toStringAsFixed(4)})',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                "Posts",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _buildPostCard(context, post),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _buildPostCard(BuildContext context, PostModel post) {
-    return Card(
-      color: const Color.fromARGB(255, 251, 217, 169),
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: AssetImage(post.userAvatar),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.userName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      post.timeAgo,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (post.location != null) ...[
-              Text(
-                '${post.location} (${post.latitude?.toStringAsFixed(4)}, ${post.longitude?.toStringAsFixed(4)})',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 5),
-            ],
-            Text(
-              post.content,
-              style: const TextStyle(fontSize: 14),
-            ),
-            if (post.imagePath != null) ...[
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!, width: 1),
-                  ),
-                  child: Image.asset(
-                    post.imagePath!,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("${post.likes} Likes"),
-                Text("${post.comments} Comments"),
-                Text("${post.shares} Shares"),
-              ],
-            ),
-            const Divider(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildInteractionButton(
-                  icon: Icons.thumb_up_outlined,
-                  icolor: Colors.grey[600],
-                  label: "Like",
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Like clicked")),
-                    );
-                  },
-                ),
-                _buildInteractionButton(
-                  icon: Icons.comment_outlined,
-                  icolor: Colors.grey[600],
-                  label: "Comment",
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Comment clicked")),
-                    );
-                  },
-                ),
-                _buildInteractionButton(
-                  icon: Icons.add_location_alt,
-                  icolor: Colors.grey[600],
-                  label: "Add",
-                  onTap: _showLocationSearchDialog,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInteractionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required dynamic icolor,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
+  Drawer drawerBar(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
         children: [
-          Icon(icon, color: icolor, size: 20),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          DrawerHeader(
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 240, 144, 9),
+            ),
+            child: const Text(
+              "Menu",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: Image.asset("assets/images/user1.png"),
+            title: const Text('Edit Profile'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProfile(
+                    onAvatarUpdated: _updateProfileState,
+                  ),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Logout'),
+            onTap: () async {
+              Navigator.pop(context);
+              await _logout();
+            },
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return ListView.builder(
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.all(8.0),
+          child: Container(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 100,
+                      height: 12,
+                      color: Colors.grey[300],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  double? _parseToDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+}
+
+class SignInPage extends StatelessWidget {
+  const SignInPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: const Center(child: Text('Sign In Page')),);
   }
 }
