@@ -59,7 +59,10 @@ def get_user_commented_posts():
     try:
         print(f"Fetching posts for user: {username}")
         # Find posts where the user has commented
-        posts = list(db.get_collection('posts').find({'commentsList.userName': username.strip('"').strip("'")}))
+        posts = list(db.get_collection('posts').find({
+            'commentsList.userName': username.strip('"').strip("'"),
+            'valid': 'true'
+        }))
         
         # Convert MongoDB cursor to JSON serializable format
         posts_json = json.loads(json_util.dumps(posts))
@@ -91,7 +94,10 @@ def get_user_commented_locations():
     try:
         print(f"Fetching locations for user: {username}")
         # Find posts where the user has commented
-        posts = list(db.get_collection('posts').find({'commentsList.userName': username.strip('"').strip("'")}))
+        posts = list(db.get_collection('posts').find({
+            'commentsList.userName': username.strip('"').strip("'"),
+            'valid': 'true'
+        }))
         
         # Extract unique locations from the posts with coordinates
         locations_dict = {}

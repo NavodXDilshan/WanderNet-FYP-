@@ -73,6 +73,123 @@ class PostCard extends StatelessWidget {
     }
   }
 
+  // Report post function (dummy implementation)
+  void _reportPost(String reason) {
+    // TODO: Implement actual report functionality
+    print('Post reported for: $reason');
+  }
+
+  // Show report dialog
+  void _showReportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.report_outlined, color: Colors.red.shade400, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Report Post',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Why are you reporting this post?',
+                style: TextStyle(fontSize: 16, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              _buildReportOption(
+                context,
+                Icons.warning_amber_outlined,
+                'Inappropriate content',
+                Colors.orange.shade400,
+              ),
+              _buildReportOption(
+                context,
+                Icons.security_outlined,
+                'Spam or scam',
+                Colors.red.shade400,
+              ),
+              _buildReportOption(
+                context,
+                Icons.info_outline,
+                'Misleading information',
+                Colors.blue.shade400,
+              ),
+              _buildReportOption(
+                context,
+                Icons.more_horiz,
+                'Other',
+                Colors.grey.shade400,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildReportOption(BuildContext context, IconData icon, String reason, Color color) {
+    return InkWell(
+      onTap: () async {
+        Navigator.of(context).pop();
+        await MongoDataBase.insertPostReport({
+          'postId': post.id,
+          'reportedBy': username,
+          'reason': reason,
+          'reportedAt': DateTime.now().toIso8601String(),
+          'imagePath':post.imagePath
+        });
+
+        _reportPost(reason);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text('Post reported for: $reason'),
+              ],
+            ),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              reason,
+              style: const TextStyle(fontSize: 15, color: Colors.black87),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildModernInteractionButton({
     required IconData icon,
     required IconData activeIcon,
@@ -276,7 +393,9 @@ class PostCard extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () {
+                                _showReportDialog(context);
+                            },
                             icon: Icon(
                               Icons.more_horiz,
                               color: Colors.grey.shade400,
@@ -517,7 +636,7 @@ class PostCard extends StatelessWidget {
                                     'placeName': post.location,
                                     'latitude': post.latitude,
                                     'longitude': post.longitude,
-                                    'placeId': post.placeId ?? '',
+                                    'placeId': post.location ?? '',
                                     'createdAt': DateTime.now().toIso8601String(),
                                   });
                                   if (context.mounted) {

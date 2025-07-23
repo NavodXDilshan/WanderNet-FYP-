@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:app/models/post_model.dart';
-import 'package:app/dbHelper/mongodb.dart';
 import 'package:app/components/post_card.dart';
 import 'package:app/aiHelper/flask.dart';
 import 'package:app/models/location_model.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ForYouFeed extends StatefulWidget {
