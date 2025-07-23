@@ -275,9 +275,11 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return FutureBuilder<List<bool>>(
       future: Future.wait([
+
         MongoDataBase.hasUserLiked(post.id, currentUserId),
         MongoDataBase.fetchWishlistItems(userEmail).then((items) {
-          return items.any((item) => item['placeId'] == post.placeId && post.placeId != null);
+          // print(items.any((item) => item['placeId'] == post.location));
+          return items.any((item) => item['placeId'] == post.location);
         }),
       ]),
       builder: (context, snapshot) {

@@ -259,6 +259,7 @@ static Future<void> connect() async {
     try {
       final collection = _dbWishlist!.collection(userEmail);
       final items = await collection.find().toList();
+      print(items);
       return items.cast<Map<String, dynamic>>();
     } catch (e) {
       print('Error fetching wishlist items: $e');
