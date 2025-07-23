@@ -118,7 +118,7 @@ class _FeedState extends State<Feed> with SingleTickerProviderStateMixin {
               ),
               tabs: const [
                 Tab(text: 'For You'),
-                Tab(text: 'Following'),
+                Tab(text: 'Latest'),
               ],
             ),
           ),
