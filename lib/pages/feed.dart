@@ -82,6 +82,7 @@ class _FeedState extends State<Feed> with SingleTickerProviderStateMixin {
       appBar: appbar(),
       backgroundColor: Colors.white,
       endDrawer: drawerBar(context),
+      // floatingActionButton: FloatingActionButton(onPressed: null),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.lightBlueAccent,
         foregroundColor: Colors.white,

@@ -13,6 +13,7 @@ class MongoDataBase {
   static mongo.DbCollection? _marketCollection;
   static mongo.DbCollection? _chatCollection;
   static mongo.DbCollection? _reportsCollection;
+  static mongo.DbCollection? _reportedPostsCollection; // New collection for reported posts
   static bool _isConnected = false;
   static bool _isChatsConnected = false;
   static bool _isReportsConnected = false;
@@ -81,6 +82,7 @@ class MongoDataBase {
       _dbReports = await mongo.Db.create(MONGO_URL_reports);
       await _dbReports!.open();
       _reportsCollection = _dbReports!.collection('reported-markets');
+      _reportedPostsCollection = _dbReports!.collection('reported-posts'); // Initialize reported-posts collection
       _isReportsConnected = true;
       print('MongoDB reports database connected successfully');
     } catch (e) {
@@ -102,7 +104,7 @@ class MongoDataBase {
   }
 
   static void _ensureReportsInitialized() {
-    if (!_isReportsConnected || _dbReports == null || _reportsCollection == null) {
+    if (!_isReportsConnected || _dbReports == null || _reportsCollection == null || _reportedPostsCollection == null) {
       throw StateError('Reports database is not initialized. Call connectToReports() first.');
     }
   }
@@ -178,7 +180,7 @@ class MongoDataBase {
     try {
       final query = username != null ? mongo.where.eq('userName', username) : mongo.where;
       final posts = await _postsCollection!
-          .find(query.sortBy('createdAt', descending: true))
+          .find(mongo.where.eq('valid', 'true').sortBy('createdAt', descending: true))
           .toList();
       return posts.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -383,13 +385,75 @@ class MongoDataBase {
     }
   }
 
+  // Existing method for reporting markets (unchanged)
   static Future<void> insertReport(Map<String, dynamic> reportData) async {
     try {
       _ensureReportsInitialized();
       await _reportsCollection!.insertOne(reportData);
-      print('Report inserted successfully');
+      print('Market report inserted successfully');
     } catch (e) {
-      print('Error inserting report: $e');
+      print('Error inserting market report: $e');
+      rethrow;
+    }
+  }
+
+  // New method for reporting posts
+  static Future<void> insertPostReport(Map<String, dynamic> reportData) async {
+    try {
+      _ensureReportsInitialized();
+      await _reportedPostsCollection!.insertOne(reportData);
+      print('Post report inserted successfully');
+    } catch (e) {
+      print('Error inserting post report: $e');
+      rethrow;
+    }
+  }
+
+  // Fetch reported posts
+  static Future<List<Map<String, dynamic>>> fetchReportedPosts() async {
+    try {
+      _ensureReportsInitialized();
+      final reports = await _reportedPostsCollection!
+          .find(mongo.where.sortBy('reportedAt', descending: true))
+          .toList();
+      return reports.cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching reported posts: $e');
+      return [];
+    }
+  }
+
+  // Fetch reported markets (for consistency)
+  static Future<List<Map<String, dynamic>>> fetchReportedMarkets() async {
+    try {
+      _ensureReportsInitialized();
+      final reports = await _reportsCollection!
+          .find(mongo.where.sortBy('reportedAt', descending: true))
+          .toList();
+      return reports.cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching reported markets: $e');
+      return [];
+    }
+  }
+
+  // Update report status (can be used for both posts and markets)
+  static Future<void> updateReportStatus(String reportId, String status, {bool isPostReport = false}) async {
+    try {
+      _ensureReportsInitialized();
+      final collection = isPostReport ? _reportedPostsCollection! : _reportsCollection!;
+      await collection.update(
+        mongo.where.eq('_id', mongo.ObjectId.fromHexString(reportId)),
+        {
+          '\$set': {
+            'status': status,
+            'updatedAt': DateTime.now().toIso8601String(),
+          }
+        },
+      );
+      print('Report status updated successfully');
+    } catch (e) {
+      print('Error updating report status: $e');
       rethrow;
     }
   }

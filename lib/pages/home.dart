@@ -205,6 +205,7 @@ class _HomepageState extends State<Homepage> {
       resizeToAvoidBottomInset: false,
       appBar: _appBar(),
       backgroundColor: Colors.white,
+      floatingActionButton: FloatingActionButton(onPressed: null),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
