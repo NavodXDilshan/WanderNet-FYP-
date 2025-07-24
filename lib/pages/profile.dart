@@ -83,8 +83,10 @@ class _ProfileState extends State<Profile> with SingleTickerProviderStateMixin {
     }
     try {
       final posts = await MongoDataBase.fetchPosts(username: username);
-      print('Fetched ${posts.length} posts for user $username');
-      return posts;
+      // Filter to ensure only posts where userName matches the current username
+      final userPosts = posts.where((post) => post['userName'] == username).toList();
+      print('Fetched ${userPosts.length} posts for user $username');
+      return userPosts;
     } catch (e) {
       print('Error fetching user posts: $e');
       ScaffoldMessenger.of(context).showSnackBar(
