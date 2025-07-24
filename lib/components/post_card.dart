@@ -149,6 +149,7 @@ class PostCard extends StatelessWidget {
     return InkWell(
       onTap: () async {
         Navigator.of(context).pop();
+        await MongoDataBase.connectToReports();
         await MongoDataBase.insertPostReport({
           'postId': post.id,
           'reportedBy': username,

@@ -1,3 +1,4 @@
+import 'package:app/pages/chatbot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
@@ -280,11 +281,36 @@ class _MarketState extends State<Market> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddItemDialog,
+floatingActionButton: Column(
+  mainAxisSize: MainAxisSize.min,
+  crossAxisAlignment: CrossAxisAlignment.end,
+  children: [
+      FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
+          );
+        },
         backgroundColor: const Color.fromARGB(255, 240, 144, 9),
-        child: const Icon(Icons.add),
+        heroTag: 'chatbot',
+                child: const Icon(
+          Icons.chat_bubble,
+          color: Color.fromARGB(255, 248, 248, 248),
+        ),
       ),
+    const SizedBox(height: 16), // spacing between FABs
+    FloatingActionButton(
+      heroTag: "btn2",
+      onPressed: _showAddItemDialog,
+      backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+      child: const Icon(Icons.add),
+    ),
+  ],
+),
+
     );
   }
 
@@ -874,7 +900,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
           print('Marker added at: $placeName ($lat, $lng)');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location not found. Try a different name (e.g., Colombo, LK).')),
+            const SnackBar(content: Text('Location not found. Try a different name')),
           );
         }
       } else {

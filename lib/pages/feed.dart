@@ -1,3 +1,4 @@
+import 'package:app/pages/chatbot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:app/models/post_model.dart';
@@ -83,22 +84,49 @@ class _FeedState extends State<Feed> with SingleTickerProviderStateMixin {
       backgroundColor: Colors.white,
       endDrawer: drawerBar(context),
       // floatingActionButton: FloatingActionButton(onPressed: null),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.lightBlueAccent,
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          final result = await Navigator.push(
+floatingActionButton: Column(
+  mainAxisSize: MainAxisSize.min,
+  crossAxisAlignment: CrossAxisAlignment.end,
+  children: [
+    // Top FAB
+      FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const CreatePostPage()),
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
           );
-          
-          // Only refresh if post was successfully created
-          if (result == true) {
-            setState(() {}); // Refresh feed
-          }
         },
-        child: const Icon(Icons.add),
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        heroTag: 'chatbot',
+                child: const Icon(
+          Icons.chat_bubble,
+          color: Color.fromARGB(255, 248, 248, 248),
+        ),
       ),
+    const SizedBox(height: 16), // spacing between the FABs
+
+    // Bottom FAB (existing one)
+    FloatingActionButton(
+      heroTag: "addPostButton", // Unique tag
+      backgroundColor: Colors.lightBlueAccent,
+      foregroundColor: Colors.white,
+      onPressed: () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreatePostPage()),
+        );
+        
+        if (result == true) {
+          setState(() {}); // Refresh feed
+        }
+      },
+      child: const Icon(Icons.add),
+    ),
+  ],
+),
+
       body: Column(
         children: [
           // Tab Bar

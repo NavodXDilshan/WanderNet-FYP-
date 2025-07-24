@@ -464,6 +464,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     'latitude': _selectedLocation?.latitude,
                     'longitude': _selectedLocation?.longitude,
                     'commentsList': [],
+                    'valid':'true',
                   });
                   
                   if (mounted) {

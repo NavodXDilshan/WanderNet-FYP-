@@ -5,6 +5,7 @@ import 'package:app/models/searchLocationModel.dart';
 import 'package:app/models/wild_model.dart';
 import 'package:app/models/entertainment_model.dart';
 import 'package:app/pages/SearchLocationDetailPage.dart';
+import 'package:app/pages/chatbot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -205,7 +206,22 @@ class _HomepageState extends State<Homepage> {
       resizeToAvoidBottomInset: false,
       appBar: _appBar(),
       backgroundColor: Colors.white,
-      floatingActionButton: FloatingActionButton(onPressed: null),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
+          );
+        },
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        heroTag: 'chatbot',
+        child: const Icon(
+          Icons.chat_bubble,
+          color: Color.fromARGB(255, 248, 248, 248),
+        ),
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -770,26 +786,19 @@ class LocationDetailPage extends StatefulWidget {
 }
 
 class _LocationDetailPageState extends State<LocationDetailPage> {
-  Future<void> _launchURL(String url, BuildContext context) async {
-    print('Attempting to launch URL: $url');
-    if (await canLaunchUrl(Uri.parse(url))) {
-      try {
-        await launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        );
-      } catch (e) {
-        print('Launch error: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch URL')),
-        );
-      }
-    } else {
-      print('Failed to launch URL: $url - CanLaunch returned false');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not launch URL')),
-      );
-    }
+  Future<void> _copyToClipboard(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: widget.name));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied "${widget.name}" to clipboard')),
+    );
+  }
+
+  Future<void> _copyToClipboardUrl(String platform, BuildContext context) async {
+    final url = _getBookingUrl(platform);
+    await Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $platform URL to clipboard')),
+    );
   }
 
   String _getBookingUrl(String platform) {
@@ -807,13 +816,6 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
       default:
         return '';
     }
-  }
-
-  Future<void> _copyToClipboard(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: widget.name));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied "${widget.name}" to clipboard')),
-    );
   }
 
   @override
@@ -974,14 +976,14 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         ElevatedButton(
-                          onPressed: () => _launchURL(_getBookingUrl('TripAdvisor'), context),
+                          onPressed: () => _copyToClipboardUrl('TripAdvisor', context),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color.fromARGB(255, 240, 144, 9),
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             minimumSize: const Size(200, 48),
                           ),
                           child: const Text(
-                            'Book on TripAdvisor',
+                            'Copy TripAdvisor URL',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -991,14 +993,14 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
                         ),
                         const SizedBox(height: 10),
                         ElevatedButton(
-                          onPressed: () => _launchURL(_getBookingUrl('airbnb'), context),
+                          onPressed: () => _copyToClipboardUrl('airbnb', context),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color.fromARGB(255, 240, 144, 9),
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             minimumSize: const Size(200, 48),
                           ),
                           child: const Text(
-                            'Book on AirBnb',
+                            'Copy Airbnb URL',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -1008,14 +1010,14 @@ class _LocationDetailPageState extends State<LocationDetailPage> {
                         ),
                         const SizedBox(height: 10),
                         ElevatedButton(
-                          onPressed: () => _launchURL(_getBookingUrl('Booking.com'), context),
+                          onPressed: () => _copyToClipboardUrl('Booking.com', context),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color.fromARGB(255, 240, 144, 9),
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             minimumSize: const Size(200, 48),
                           ),
                           child: const Text(
-                            'Book on Booking.com',
+                            'Copy Booking.com URL',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,

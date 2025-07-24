@@ -1,3 +1,4 @@
+import 'package:app/pages/chatbot.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -236,6 +237,23 @@ class _WeatherScreenState extends State<WeatherScreen> {
         ),
         centerTitle: true,
         backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        
+      ),
+            floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatbotPage(),
+            ),
+          );
+        },
+        backgroundColor: const Color.fromARGB(255, 240, 144, 9),
+        heroTag: 'chatbot',
+                       child: const Icon(
+          Icons.chat_bubble,
+          color: Color.fromARGB(255, 248, 248, 248),
+        ),
       ),
       body: Stack(
         children: [
