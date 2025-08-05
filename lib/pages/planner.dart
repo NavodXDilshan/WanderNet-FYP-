@@ -69,6 +69,7 @@ class PlannerState extends State<Planner> {
   String? selectedTargetPlaceId;
   List<Map<String, dynamic>> wishlistItems = [];
   List<Map<String, dynamic>> nearbyAttractions = [];
+  Map<String, List<Map<String, dynamic>>> _groupedAttractions = {}; // New state variable for grouped attractions
   final List<String> options = ['Max Node', 'Max Rating', 'Hybrid'];
   static const String googleApiKey = 'AIzaSyCSHjnVgYUxWctnEfeH3S3501J-j0iYZU0';
   bool _useRealRoutes = true;
@@ -190,7 +191,7 @@ class PlannerState extends State<Planner> {
         if (wishlistItems.isNotEmpty) {
           final validStart = wishlistItems.any((item) => item['placeId'] == selectedStartPlaceId || item['placeName'] == selectedStartPlaceId);
           final validTarget = wishlistItems.any((item) => item['placeId'] == selectedTargetPlaceId || item['placeName'] == selectedTargetPlaceId);
-          
+
           selectedStartPlaceId = validStart ? selectedStartPlaceId : (wishlistItems[0]['placeId'] as String? ?? wishlistItems[0]['placeName'] as String? ?? 'Unknown Place');
           selectedTargetPlaceId = validTarget && wishlistItems.length > 1
               ? selectedTargetPlaceId
@@ -215,11 +216,22 @@ class PlannerState extends State<Planner> {
     try {
       setState(() {
         nearbyAttractions = [];
+        _groupedAttractions = {};
       });
       final seenPlaceIds = <String>{};
-      final attractions = <Map<String, dynamic>>[];
+      final Map<String, List<Map<String, dynamic>>> groupedAttractions = {};
 
       for (final waypoint in waypoints) {
+        // Find the wishlist item corresponding to this waypoint
+        final wishlistItem = wishlistItems.firstWhere(
+          (item) =>
+              item['latitude'] == waypoint.latitude &&
+              item['longitude'] == waypoint.longitude,
+          orElse: () => {'placeName': 'Unknown Location'},
+        );
+        final placeName = wishlistItem['placeName'] as String? ?? 'Unknown Location';
+        groupedAttractions[placeName] = groupedAttractions[placeName] ?? [];
+
         final response = await http.get(
           Uri.parse(
             'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
@@ -235,13 +247,14 @@ class PlannerState extends State<Planner> {
               final placeId = result['place_id'] as String?;
               if (placeId == null || seenPlaceIds.contains(placeId)) continue;
               seenPlaceIds.add(placeId);
-              attractions.add({
+              final attraction = {
                 'placeId': placeId,
                 'name': result['name'] as String? ?? 'Unknown Attraction',
                 'latitude': result['geometry']['location']['lat'] as double?,
                 'longitude': result['geometry']['location']['lng'] as double?,
                 'rating': result['rating']?.toDouble() ?? 0.0,
-              });
+              };
+              groupedAttractions[placeName]!.add(attraction);
             }
           } else {
             print('Nearby search API error: ${data['status']}');
@@ -252,9 +265,10 @@ class PlannerState extends State<Planner> {
       }
 
       setState(() {
-        nearbyAttractions = attractions;
+        nearbyAttractions = groupedAttractions.values.expand((list) => list).toList();
+        _groupedAttractions = groupedAttractions;
       });
-      print('Fetched ${nearbyAttractions.length} nearby attractions');
+      print('Fetched ${nearbyAttractions.length} nearby attractions, grouped under ${groupedAttractions.length} locations');
     } catch (e) {
       print('Error fetching nearby attractions: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -714,10 +728,11 @@ class PlannerState extends State<Planner> {
         onTargetChanged: _updateSelectedTarget,
         useRealRoutes: _useRealRoutes,
         onRouteTypeChanged: _toggleRouteType,
-        onWishlistUpdated: _loadWishlistData, // Pass callback to DrawerBar
+        onWishlistUpdated: _loadWishlistData,
       ),
       endDrawer: NearbyAttractionsDrawer(
         nearbyAttractions: nearbyAttractions,
+        groupedAttractions: _groupedAttractions,
         onAddToWishlist: _addAttractionToWishlist,
         onRecalculate: () {
           Navigator.pop(context);
@@ -854,7 +869,7 @@ class DrawerBar extends StatelessWidget {
   final ValueChanged<String?> onTargetChanged;
   final bool useRealRoutes;
   final ValueChanged<bool> onRouteTypeChanged;
-  final VoidCallback onWishlistUpdated; // Callback to refresh Planner
+  final VoidCallback onWishlistUpdated;
 
   const DrawerBar({
     super.key,
@@ -906,7 +921,7 @@ class DrawerBar extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => Settings(onWishlistUpdated: onWishlistUpdated), // Pass callback to Settings
+                  builder: (context) => Settings(onWishlistUpdated: onWishlistUpdated),
                 ),
               );
             },
@@ -1024,12 +1039,14 @@ class DrawerBar extends StatelessWidget {
 
 class NearbyAttractionsDrawer extends StatelessWidget {
   final List<Map<String, dynamic>> nearbyAttractions;
+  final Map<String, List<Map<String, dynamic>>> groupedAttractions;
   final Function(Map<String, dynamic>) onAddToWishlist;
   final VoidCallback onRecalculate;
 
   const NearbyAttractionsDrawer({
     super.key,
     required this.nearbyAttractions,
+    required this.groupedAttractions,
     required this.onAddToWishlist,
     required this.onRecalculate,
   });
@@ -1052,25 +1069,46 @@ class NearbyAttractionsDrawer extends StatelessWidget {
               ),
             ),
           ),
-          if (nearbyAttractions.isEmpty)
+          if (groupedAttractions.isEmpty)
             const ListTile(
               title: Text('No nearby attractions found'),
               subtitle: Text('Calculate a route to find attractions'),
             ),
-          ...nearbyAttractions.map((attraction) {
-            return ListTile(
-              title: Text(
-                attraction['name'] ?? 'Unknown Attraction',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                'Rating: ${attraction['rating']?.toStringAsFixed(1) ?? 'N/A'}',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              trailing: IconButton(
-                icon: const Icon(Icons.add, color: Colors.green),
-                onPressed: () => onAddToWishlist(attraction),
-              ),
+          ...groupedAttractions.entries.map((entry) {
+            final placeName = entry.key;
+            final attractions = entry.value;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text(
+                    placeName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color.fromARGB(255, 240, 144, 9),
+                    ),
+                  ),
+                ),
+                ...attractions.map((attraction) {
+                  return ListTile(
+                    title: Text(
+                      attraction['name'] ?? 'Unknown Attraction',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      'Rating: ${attraction['rating']?.toStringAsFixed(1) ?? 'N/A'}',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.add, color: Colors.green),
+                      onPressed: () => onAddToWishlist(attraction),
+                    ),
+                  );
+                }).toList(),
+                const Divider(),
+              ],
             );
           }).toList(),
           Padding(

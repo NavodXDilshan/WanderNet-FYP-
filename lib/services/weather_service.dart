@@ -41,13 +41,13 @@ class WeatherService {
       return _cache[cacheKey]!;
     }
 
-    // Step 1: Get coordinates from Google Geocoding API
+    //Get coordinates from Google API
     final coordinates = await _getCoordinatesFromCity(city);
     final lat = coordinates['lat'];
     final lng = coordinates['lng'];
     final placeName = coordinates['placeName'];
 
-    // Step 2: Fetch weather using Ambee's /by-lat-lng
+    //Fetch weather using Ambee by-lat-lng
     final url = Uri.parse('$_ambeeBaseUrl/latest/by-lat-lng?lat=$lat&lng=$lng&units=si');
     final response = await http.get(
       url,
@@ -62,7 +62,7 @@ class WeatherService {
     } else {
       final error = jsonDecode(response.body)['message'] ?? response.body;
       if (response.statusCode == 401) {
-        throw Exception('Invalid Ambee API key. Verify at api.ambeedata.com.');
+        throw Exception('Invalid Ambee API key');
       } else {
         throw Exception('Failed to fetch weather: ${response.statusCode}, $error');
       }
