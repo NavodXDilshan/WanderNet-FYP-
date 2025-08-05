@@ -19,10 +19,10 @@ app = Flask(__name__)
 CORS(app)
 
 uri = "mongodb+srv://kmnavoddilshan:NJj9WAAEjavgxBgK@cluster0.vighfql.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-# Create a new client and connect to the server
+
 client = MongoClient(uri, server_api=ServerApi('1'))
 db = client.get_database('posts')
-# Send a ping to confirm a successful connection
+
 try:
     client.admin.command('ping')
     print("Pinged your deployment. You successfully connected to MongoDB!")
@@ -109,7 +109,7 @@ class RecommendationEngine:
         if not text:
             return []
 
-        # Simple keyword extraction (in production, use more sophisticated NLP)
+
         words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
         # Remove common stop words
         stop_words = {'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our',
@@ -172,11 +172,10 @@ class RecommendationEngine:
         comments = post.get('comments', 0)
         shares = post.get('shares', 0)
 
-        # Weighted engagement score
+
         engagement = likes + (comments * 2) + (shares * 3)
 
-        # Normalize using sigmoid function to get 0-1 range
-        # Assume 20 total engagement is moderately high
+
         normalized_score = 1 / (1 + math.exp(-(engagement - 10) / 5))
         return normalized_score
 
@@ -205,7 +204,6 @@ class RecommendationEngine:
         if post_author == user_profile['username']:
             return 0  # Don't recommend user's own posts
 
-        # Check if user has interacted with this author before
         interacted_authors = set()
         for liked_post in user_profile['liked_posts']:
             interacted_authors.add(liked_post.get('userName', ''))
@@ -215,7 +213,6 @@ class RecommendationEngine:
         if post_author in interacted_authors:
             return 0.8  # High score for familiar authors
 
-        # For new authors, give neutral score
         return 0.4
 
     def calculate_diversity_penalty(self, post, recent_recommendations):
@@ -223,12 +220,10 @@ class RecommendationEngine:
         if not recent_recommendations:
             return 0
 
-        # Check location diversity
         post_location = post.get('location', '').lower()
         recent_locations = [r.get('location', '').lower() for r in recent_recommendations]
         location_matches = sum(1 for loc in recent_locations if loc and post_location and loc in post_location)
 
-        # Check content diversity
         post_keywords = set(self._extract_keywords(post.get('content', '')))
         recent_keywords = set()
         for rec in recent_recommendations:
@@ -236,7 +231,6 @@ class RecommendationEngine:
 
         keyword_overlap = len(post_keywords.intersection(recent_keywords)) / max(len(post_keywords), 1)
 
-        # Calculate penalty (0-1, where 1 is maximum penalty)
         diversity_penalty = min((location_matches * 0.3) + (keyword_overlap * 0.7), 1.0)
         return diversity_penalty
 
@@ -245,7 +239,7 @@ class RecommendationEngine:
         if recent_recommendations is None:
             recent_recommendations = []
 
-        # Calculate individual scores
+        
         location_score = self.calculate_location_score(user_profile, post)
         content_score = self.calculate_content_similarity_score(user_profile, post)
         social_score = self.calculate_social_proof_score(post)
@@ -253,7 +247,7 @@ class RecommendationEngine:
         user_similarity_score = self.calculate_user_similarity_score(user_profile, post)
         diversity_penalty = self.calculate_diversity_penalty(post, recent_recommendations)
 
-        # Calculate weighted score
+        
         base_score = (
                 weights['location'] * location_score +
                 weights['content'] * content_score +
@@ -262,7 +256,7 @@ class RecommendationEngine:
                 weights['user_similarity'] * user_similarity_score
         )
 
-        # Apply diversity penalty
+       
         final_score = base_score * (1 - diversity_penalty * weights['diversity_penalty'])
 
         return {
@@ -281,7 +275,7 @@ class RecommendationEngine:
     def get_personalized_recommendations(self, username, limit=10, weights=None):
         """Generate personalized recommendations using multi-factor scoring"""
 
-        # Default weights (can be tuned based on A/B testing)
+        
         if weights is None:
             weights = {
                 'location': 0.25,
@@ -292,10 +286,10 @@ class RecommendationEngine:
                 'diversity_penalty': 0.3
             }
 
-        # Get user profile
+        
         user_profile = self.get_user_profile(username)
 
-        # Get all valid posts excluding user's own posts and already interacted posts
+        
         interacted_post_ids = set()
         for post in user_profile['liked_posts'] + user_profile['commented_posts'] + user_profile['user_posts']:
             interacted_post_ids.add(str(post['_id']))
@@ -306,10 +300,10 @@ class RecommendationEngine:
             'userName': {'$ne': username}
         }))
 
-        # Filter out already interacted posts
+        
         candidate_posts = [post for post in candidate_posts if str(post['_id']) not in interacted_post_ids]
 
-        # Calculate scores for all candidate posts
+        
         scored_posts = []
         for post in candidate_posts:
             score_data = self.calculate_multi_factor_score(user_profile, post, weights)
@@ -319,10 +313,10 @@ class RecommendationEngine:
                 'score_breakdown': score_data['breakdown']
             })
 
-        # Sort by score and apply diversity filtering
+        
         scored_posts.sort(key=lambda x: x['score'], reverse=True)
 
-        # Select top recommendations with diversity consideration
+        
         final_recommendations = []
         recent_recommendations = []
 
@@ -332,7 +326,7 @@ class RecommendationEngine:
 
             post = scored_post['post']
 
-            # Recalculate score with current recommendations for diversity
+            
             updated_score_data = self.calculate_multi_factor_score(
                 user_profile, post, weights, recent_recommendations
             )
@@ -373,7 +367,7 @@ class RecommendationEngine:
         return "; ".join(explanations)
 
 
-# Initialize recommendation engine
+
 recommendation_engine = None
 
 
@@ -386,10 +380,10 @@ def init_recommendation_engine(db):
 @app.route('/posts', methods=['GET'])
 def get_posts():
     try:
-        # Get all posts from collection
+        
         posts = list(db.get_collection('posts').find())
 
-        # Convert MongoDB cursor to JSON serializable format
+        
         posts_json = json.loads(json_util.dumps(posts))
 
         return jsonify({
@@ -412,7 +406,7 @@ def get_user_recommendations():
     limit = int(request.args.get('limit', 10))
     include_explanation = request.args.get('explain', 'false').lower() == 'true'
 
-    # Optional: Allow custom weights via query parameters
+    
     custom_weights = {}
     weight_params = ['location', 'content', 'social', 'temporal', 'user_similarity', 'diversity_penalty']
     for param in weight_params:
@@ -431,14 +425,14 @@ def get_user_recommendations():
     try:
         print(f"Generating recommendations for user: {username}")
 
-        # Generate recommendations
+        
         recommendations, user_profile = recommendation_engine.get_personalized_recommendations(
             username=username.strip('"').strip("'"),
             limit=limit,
             weights=custom_weights if custom_weights else None
         )
 
-        # Format response
+        
         formatted_recommendations = []
         for rec in recommendations:
             post_data = json.loads(json_util.dumps(rec['post']))
@@ -479,7 +473,7 @@ def get_user_recommendations():
         }), 500
 
 
-# Get posts a user commented on
+
 @app.route('/posts/commented', methods=['GET'])
 def get_user_commented_posts():
     username = request.args.get('username')
@@ -506,7 +500,7 @@ def get_user_commented_posts():
         }), 500
 
 
-# Get locations a user commented on
+
 @app.route('/locations/commented', methods=['GET'])
 def get_user_commented_locations():
     username = request.args.get('username')
@@ -518,29 +512,29 @@ def get_user_commented_locations():
 
     try:
         print(f"Fetching locations for user: {username}")
-        # Find posts where the user has commented
+        
         posts = list(db.get_collection('posts').find({
             'commentsList.userName': username.strip('"').strip("'"),
             'valid': 'true'
         }))
 
-        # Extract unique locations from the posts with coordinates
+        
         locations_dict = {}
         for post in posts:
             if 'location' in post and post['location'] and post['location'] != "Location selected":
                 location_key = post['location']
-                # Only add if we haven't seen this location before
+               
                 if location_key not in locations_dict:
                     location_obj = {
                         'location': post['location'],
                         'latitude': post.get('latitude'),
                         'longitude': post.get('longitude')
                     }
-                    # Only add locations that have valid coordinates
+                   
                     if location_obj['latitude'] is not None and location_obj['longitude'] is not None:
                         locations_dict[location_key] = location_obj
 
-        # Convert to list
+       
         locations_list = list(locations_dict.values())
 
         return locations_list, 200
